@@ -2,11 +2,6 @@ use std::collections::BTreeMap;
 
 use serde_cbor::Value;
 
-// Copyright (c) 2021 Patrick Amrein <amrein@ubique.ch>
-//
-// This software is released under the MIT License.
-// https://opensource.org/licenses/MIT
-
 const HCERT_KEY: i128 = -260;
 const HCERT_V1: i128 = 1;
 
