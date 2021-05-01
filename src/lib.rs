@@ -5,6 +5,33 @@ use serde_cbor::Value;
 const HCERT_KEY: i128 = -260;
 const HCERT_V1: i128 = 1;
 
+/// Get the CWT payload, which according to [RFC-8392 Section-7](https://tools.ietf.org/html/rfc8392#section-7)
+/// is just the `Cose_Sign1` Struct from [RFC-8152 Section-4.2](https://tools.ietf.org/html/rfc8152#section-4.2)
+/// This means we have a CBOR-Array like this, where the `Headers` defines the Algorithm used and `payload` contains
+/// CWT's claims. In our case the `hcert` will be one of those claims.
+/// ## COSE Sign struct
+/// ```
+/// COSE_Sign = [
+///       Headers,
+///       payload : bstr / nil,
+///       signatures : [+ COSE_Signature]
+///   ]
+///```
+/// ## COSE Protected Headers and Unprotected Headers
+/// ```
+/// Headers = (
+///       protected : empty_or_serialized_map,
+///       unprotected : header_map
+///   )
+
+///   header_map = {
+///       Generic_Headers,
+///       * label => values
+///   }
+///
+///   empty_or_serialized_map = bstr .cbor header_map / bstr .size 0
+/// ```
+
 pub fn get_payload(raw_payload: &[u8]) -> Result<CwtParsed, Box<dyn std::error::Error>> {
     let value: serde_cbor::Value = serde_cbor::from_reader(&raw_payload[..]).unwrap();
     let value = match value {
@@ -41,6 +68,7 @@ pub fn get_payload(raw_payload: &[u8]) -> Result<CwtParsed, Box<dyn std::error::
 }
 
 #[macro_export]
+/// Simple macro to produce a Vec<u8> from a byte string.
 macro_rules! from_byte_string {
     ($s:expr) => {
         $s.as_bytes()
@@ -52,6 +80,7 @@ macro_rules! from_byte_string {
 }
 
 #[macro_export]
+/// Simple macro to produce a byte string from a Vec<u8>
 macro_rules! to_byte_string {
     ($s:expr) => {
         $s.iter()
@@ -62,10 +91,19 @@ macro_rules! to_byte_string {
 }
 
 #[derive(Debug)]
+/// The parsed CWT struct
 pub struct CwtParsed {
+    /// According to [RFC-8152 Section-3] (https://tools.ietf.org/html/rfc8152#section-3) 
+    /// since the protected headers are cryptographically signed, we want to prevent accidental
+    /// changes, so they are included as a serialized CBOR Map.
     pub protected_headers: serde_cbor::Value,
+    /// Unprotected headers do not need such protection and as such are just presented as a CBOR Map
     pub unprotected_headers: BTreeMap<Value, Value>,
+    /// Since we later on want to get the `hcert` we deserialized the CBOR Byte-String. For the message
+    /// the same argumen as for the `protected_headers` is made, as the signature includes the message
+    /// payload
     pub message: BTreeMap<Value, Value>,
+    /// The signature as a byte string. In the case of `ECDSA` this is just `r || s`
     pub signature: Vec<u8>,
 }
 
