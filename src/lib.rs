@@ -107,7 +107,9 @@ pub struct CwtParsed {
     pub signature: Vec<u8>,
 }
 
+
 impl CwtParsed {
+    /// Verify the signature present in the CWT with the given [VerificationKey]
     pub fn verify(&self, key: &VerificationKey) -> Result<(), Box<dyn std::error::Error>> {
         let message = match self.get_verification_bytes() {
             Ok(v) => v,
@@ -138,6 +140,7 @@ impl CwtParsed {
         Ok(())
     }
 
+    /// Sign the CWT with the given [SigningKey]. Overwrites the `siganture` field of `self`.
     pub fn sign(&mut self, key: &SigningKey) -> Result<(), Box<dyn std::error::Error>> {
         match key {
             SigningKey::Es256 { d, x, y } => {
@@ -195,6 +198,7 @@ impl CwtParsed {
         }
         Ok(())
     }
+    /// Get the CBOR canoncial form for the bytes to sign according to [RFC-8152# Section-4.4](https://tools.ietf.org/html/rfc8152#section-4.4)
     fn get_verification_bytes(&self) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
         let mut verification = vec![];
         verification.push(Value::Text("Signature1".to_string()));
@@ -205,6 +209,7 @@ impl CwtParsed {
         Ok(serde_cbor::to_vec(&verification)?)
     }
 
+    /// The `hcert` is part of the claims in the CWT. The `hcert` itself is a container for multiple different certificates (c.f [Section 2.6.4](https://ec.europa.eu/health/sites/health/files/ehealth/docs/digital-green-certificates_v3_en.pdf)). For the Version 1 of the `DGC` the claim key `1` is used (c.f. [Section 3.3.1](https://ec.europa.eu/health/sites/health/files/ehealth/docs/digital-green-certificates_v1_en.pdf))
     pub fn get_hcert(&self) -> Option<BTreeMap<Value, Value>> {
         match self.message.get(&Value::Integer(HCERT_KEY)) {
             std::option::Option::Some(Value::Map(hcert)) => match hcert.get(&Value::Integer(HCERT_V1)) {
@@ -216,12 +221,22 @@ impl CwtParsed {
     }
 }
 
+/// Possible verification keys. Either `RSA` or `EC` 
 pub enum VerificationKey {
+    /// The elliptic curve key, where `x` and `y` are byte strings of the respective curve point
     Es256 { x: String, y: String },
+    /// RSA key in the `ASN.1` encoding as described in [RFC-3447 Appendix A 1.1](https://tools.ietf.org/html/rfc3447#appendix-A.1.1).
+    /// Note that OpenSSL usually encodes keys as a [SubjectPublicKeyInfo](https://tools.ietf.org/html/rfc5280#section-4.1).
+    /// Visit the [ring Documentation](https://briansmith.org/rustdoc/ring/signature/index.html#signing-and-verifying-with-rsa-pkcs1-15-padding) for more information on extracting the correct form.
     Rsa { key: String },
 }
+
+/// Possible SigningKeys. We allow `RSA` or `EC`.
 pub enum SigningKey {
+    /// The `EC` private key
     Es256 { d: String, x: String, y: String },
+    /// The RSA-Private key in the der format in a PKCS8 container.
     RsaPkcs8 { pkcs8: Vec<u8> },
+    /// The RSA-Private key in the der format without a ccontainer.
     RsaDer { der: Vec<u8> },
 }
