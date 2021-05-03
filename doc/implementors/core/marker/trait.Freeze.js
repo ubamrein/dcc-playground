@@ -1,0 +1,3 @@
+(function() {var implementors = {};
+implementors["rust_dgc"] = [{"text":"impl Freeze for <a class=\"struct\" href=\"rust_dgc/struct.CwtParsed.html\" title=\"struct rust_dgc::CwtParsed\">CwtParsed</a>","synthetic":true,"types":["rust_dgc::CwtParsed"]},{"text":"impl Freeze for <a class=\"enum\" href=\"rust_dgc/enum.VerificationKey.html\" title=\"enum rust_dgc::VerificationKey\">VerificationKey</a>","synthetic":true,"types":["rust_dgc::VerificationKey"]},{"text":"impl Freeze for <a class=\"enum\" href=\"rust_dgc/enum.SigningKey.html\" title=\"enum rust_dgc::SigningKey\">SigningKey</a>","synthetic":true,"types":["rust_dgc::SigningKey"]}];
+if (window.register_implementors) {window.register_implementors(implementors);} else {window.pending_implementors = implementors;}})()

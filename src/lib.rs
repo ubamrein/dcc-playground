@@ -93,7 +93,7 @@ macro_rules! to_byte_string {
 #[derive(Debug)]
 /// The parsed CWT struct
 pub struct CwtParsed {
-    /// According to [RFC-8152 Section-3] (https://tools.ietf.org/html/rfc8152#section-3) 
+    /// According to [RFC-8152 Section-3](https://tools.ietf.org/html/rfc8152#section-3) 
     /// since the protected headers are cryptographically signed, we want to prevent accidental
     /// changes, so they are included as a serialized CBOR Map.
     pub protected_headers: serde_cbor::Value,
