@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 
 use serde_cbor::Value;
 
+pub mod base45;
 const HCERT_KEY: i128 = -260;
 const HCERT_V1: i128 = 1;
 
