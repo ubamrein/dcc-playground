@@ -24,7 +24,7 @@ fn benchmark_large_encoding(bench: &mut Bencher) {
 fn benchmark_large_decoding(bench: &mut Bencher) {
      use rand::Rng;
    
-    let random_bytes: Vec<u8> = (0..1_000_000).map(|_| { 
+    let random_bytes: Vec<u8> = (0..1_500_000).map(|_| { 
         let mut rng = rand::thread_rng();
         let idx : usize = rng.gen_range(0..ALPHABET.len()); 
         ALPHABET[idx] as u8
