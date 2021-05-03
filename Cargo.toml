@@ -8,6 +8,7 @@ edition = "2018"
 [dependencies]
 base64 = "0.13.0"
 bencher = "0.1.5"
+rand = "0.8.3"
 ring = "0.16.20"
 serde = {version = "1.0.125", features = ['derive']}
 serde_cbor = "0.11.1"

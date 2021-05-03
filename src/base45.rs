@@ -1,13 +1,14 @@
 use std::convert::TryInto;
 const ALPHABET_LEN: u16 = 45;
 const ALPHABET_LEN_SQUARED: u16 = ALPHABET_LEN * ALPHABET_LEN;
-const ALPHABET: [char; ALPHABET_LEN as usize] = [
+
+pub const ALPHABET: [char; ALPHABET_LEN as usize] = [
     '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I',
     'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', ' ', '$',
     '%', '*', '+', '-', '.', '/', ':',
 ];
 
-#[inline]
+
 const fn reverse_alphabet(c: char) -> Result<u8, InvalidCharacter> {
     match c {
         '0' => Ok(0),
@@ -64,46 +65,71 @@ pub struct InvalidCharacter;
 
 /// encode a byte array to base45 according to [draft-faltstrom-base45-03 Section 4.3](https://tools.ietf.org/html/draft-faltstrom-base45-03#section-4.3)
 pub fn encode(bytes: &[u8]) -> String {
-    bytes
-        .chunks(2)
-        .map(|b| {
-            let val = u16::from_be_bytes(b.try_into().unwrap_or([0, b[0]]));
-            let a = val % ALPHABET_LEN;
-            let b = val / ALPHABET_LEN % ALPHABET_LEN;
-            let c = val / ALPHABET_LEN_SQUARED % ALPHABET_LEN;
-            //SAFETY check: we know that our string is valid utf8 since we only allow characters from our alphabet which all are valid utf8
-            unsafe {
-                // if we only have one byte in the last chunk, it is encoded with two bytes instead of three
-                if val <= u8::MAX as u16 {
-                    String::from_utf8_unchecked(vec![
-                        ALPHABET[a as usize] as u8,
-                        ALPHABET[b as usize] as u8,
-                    ])
-                } else {
-                    String::from_utf8_unchecked(vec![
-                        ALPHABET[a as usize] as u8,
-                        ALPHABET[b as usize] as u8,
-                        ALPHABET[c as usize] as u8,
-                    ])
-                }
-            }
-        })
-        .collect::<Vec<_>>()
-        .join("")
+    //SAFETY check: we know that our string is valid utf8 since we only allow characters from our alphabet which all are valid utf8
+    unsafe {
+        String::from_utf8_unchecked(
+            bytes
+                .chunks(2)
+                .flat_map(|b| {
+                    let val = u16::from_be_bytes(b.try_into().unwrap_or([0, b[0]]));
+                    let a = val % ALPHABET_LEN;
+                    let b = val / ALPHABET_LEN % ALPHABET_LEN;
+                    let c = val / ALPHABET_LEN_SQUARED % ALPHABET_LEN;
+                    // let a = 0;
+                    // let b = 0;
+                    // let c  = 0;
+
+                    // if we only have one byte in the last chunk, it is encoded with two bytes instead of three
+                    if val <= u8::MAX as u16 {
+                        vec![ALPHABET[a as usize] as u8, ALPHABET[b as usize] as u8]
+                    } else {
+                        vec![
+                            ALPHABET[a as usize] as u8,
+                            ALPHABET[b as usize] as u8,
+                            ALPHABET[c as usize] as u8,
+                        ]
+                    }
+                })
+                .collect::<Vec<u8>>(),
+        )
+    }
 }
 
 /// decode a base45 string to a byte array ignoring unknown characters
 pub fn decode(base45_string: &str) -> Result<Vec<u8>, InvalidCharacter> {
     Ok(base45_string
-        .chars()
-        .filter_map(|c| reverse_alphabet(c).ok())
-        .collect::<Vec<u8>>()
+        .as_bytes()
         .chunks(3)
         .flat_map(|c| {
             let val = match c.len() {
-                1 => c[0] as u16,
-                2 => c[1] as u16 * ALPHABET_LEN + c[0] as u16,
-                3 => c[2] as u16 * ALPHABET_LEN_SQUARED + c[1] as u16 * ALPHABET_LEN + c[0] as u16,
+                1 => {
+                    if let Ok(c) = reverse_alphabet(c[0] as char) {
+                        c as u16
+                    } else {
+                        return vec![];
+                    }
+                }
+                2 => {
+                    if let (Ok(a), Ok(b)) = (
+                        reverse_alphabet(c[0] as char),
+                        reverse_alphabet(c[1] as char),
+                    ) {
+                        b as u16 * ALPHABET_LEN + a as u16
+                    } else {
+                        return vec![];
+                    }
+                }
+                3 => {
+                    if let (Ok(a), Ok(b), Ok(c)) = (
+                        reverse_alphabet(c[0] as char),
+                        reverse_alphabet(c[1] as char),
+                        reverse_alphabet(c[2] as char),
+                    ) {
+                        c as u16 * ALPHABET_LEN_SQUARED + b as u16 * ALPHABET_LEN + a as u16
+                    } else {
+                        return vec![];
+                    }
+                }
                 _ => panic!(),
             };
             let bytes = val.to_be_bytes();
