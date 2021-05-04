@@ -91,10 +91,10 @@ macro_rules! to_byte_string {
     };
 }
 
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
 /// The parsed CWT struct
 pub struct CwtParsed {
-    /// According to [RFC-8152 Section-3](https://tools.ietf.org/html/rfc8152#section-3) 
+    /// According to [RFC-8152 Section-3](https://tools.ietf.org/html/rfc8152#section-3)
     /// since the protected headers are cryptographically signed, we want to prevent accidental
     /// changes, so they are included as a serialized CBOR Map.
     pub protected_headers: serde_cbor::Value,
@@ -107,8 +107,8 @@ pub struct CwtParsed {
     /// The signature as a byte string. In the case of `ECDSA` this is just `r || s`
     pub signature: Vec<u8>,
 }
-
-
+use p256::ecdsa::{Signature, signature::{Verifier, Signer}};
+use std::convert::TryFrom;
 impl CwtParsed {
     /// Verify the signature present in the CWT with the given [VerificationKey]
     pub fn verify(&self, key: &VerificationKey) -> Result<(), Box<dyn std::error::Error>> {
@@ -116,17 +116,19 @@ impl CwtParsed {
             Ok(v) => v,
             _ => return Err("Could not decode".into()),
         };
-        match key {
+        let success =match key {
             VerificationKey::Es256 { x, y } => {
+               
+                // #[cfg(not(target = "wasm32"))]
                 let mut pk = Vec::with_capacity(65);
                 pk.push(0x04u8);
                 pk.extend(from_byte_string!(x));
                 pk.extend(from_byte_string!(y));
-                let pk = ring::signature::UnparsedPublicKey::new(
-                    &ring::signature::ECDSA_P256_SHA256_FIXED,
-                    &pk,
-                );
-                pk.verify(&message, &self.signature)
+              
+                let point = p256::EncodedPoint::from_bytes(&pk)?;
+                let key = p256::ecdsa::VerifyingKey::from_encoded_point(&point)?;
+                let sig_bytes = self.signature.as_slice();
+                key.verify(&message, &Signature::try_from(sig_bytes)?).is_ok()
             }
             VerificationKey::Rsa { key } => {
                 let key = from_byte_string!(key);
@@ -135,10 +137,15 @@ impl CwtParsed {
                     &ring::signature::RSA_PKCS1_2048_8192_SHA256,
                     &key,
                 );
-                pk.verify(&message, &self.signature)
+                pk.verify(&message, &self.signature).is_ok()
             }
-        }.map_err(|_| "Could not verify")?;
-        Ok(())
+        };
+        if success {
+            return Ok(())
+        } else {
+            return Err("verification error".into())
+        }
+        
     }
 
     /// Sign the CWT with the given [SigningKey]. Overwrites the `siganture` field of `self`.
@@ -149,38 +156,23 @@ impl CwtParsed {
                 pk.push(0x04u8);
                 pk.extend(from_byte_string!(x));
                 pk.extend(from_byte_string!(y));
-                let key_pair = ring::signature::EcdsaKeyPair::from_private_key_and_public_key(
-                    &ring::signature::ECDSA_P256_SHA256_FIXED_SIGNING,
-                    &from_byte_string!(d),
-                    &pk,
-                )
-                .map_err(|e| format!("KeyRejected {:?}", e))?;
+                // let key_pair = ring::signature::EcdsaKeyPair::from_private_key_and_public_key(
+                //     &ring::signature::ECDSA_P256_SHA256_FIXED_SIGNING,
+                //     &from_byte_string!(d),
+                //     &pk,
+                // )
+                // .map_err(|e| format!("KeyRejected {:?}", e))?;
                 let bytes_to_sign = self.get_verification_bytes()?;
-                let rng = ring::rand::SystemRandom::new();
-                let signature = key_pair
-                    .sign(&rng, &bytes_to_sign)
-                    .map_err(|_| format!("Could not sign"))?;
+                // let rng = ring::rand::SystemRandom::new();
+                // let signature = key_pair
+                //     .sign(&rng, &bytes_to_sign)
+                //     .map_err(|_| format!("Could not sign"))?;
+                let key = p256::ecdsa::SigningKey::from_bytes(&pk)?;
+                let signature = key.sign(&bytes_to_sign);
                 self.signature = signature.as_ref().to_vec();
             }
             SigningKey::RsaPkcs8 { pkcs8 } => {
                 let rsa_keypair = ring::signature::RsaKeyPair::from_pkcs8(&pkcs8)
-                    .map_err(|e| format!("KeyRejected {:?}", e))?;
-                let bytes_to_sign = self.get_verification_bytes()?;
-                let rng = ring::rand::SystemRandom::new();
-                 let mut signature = vec![0; rsa_keypair.public_modulus_len()];
-
-                rsa_keypair
-                    .sign(
-                        &ring::signature::RSA_PKCS1_SHA256,
-                        &rng,
-                        &bytes_to_sign,
-                        &mut signature,
-                    )
-                    .map_err(|_| format!("Could not sign"))?;
-                self.signature = signature;
-            }
-            SigningKey::RsaDer { der } => {
-                  let rsa_keypair = ring::signature::RsaKeyPair::from_der(&der)
                     .map_err(|e| format!("KeyRejected {:?}", e))?;
                 let bytes_to_sign = self.get_verification_bytes()?;
                 let rng = ring::rand::SystemRandom::new();
@@ -195,7 +187,24 @@ impl CwtParsed {
                     )
                     .map_err(|_| format!("Could not sign"))?;
                 self.signature = signature;
-            },
+            }
+            SigningKey::RsaDer { der } => {
+                let rsa_keypair = ring::signature::RsaKeyPair::from_der(&der)
+                    .map_err(|e| format!("KeyRejected {:?}", e))?;
+                let bytes_to_sign = self.get_verification_bytes()?;
+                let rng = ring::rand::SystemRandom::new();
+                let mut signature = vec![0; rsa_keypair.public_modulus_len()];
+
+                rsa_keypair
+                    .sign(
+                        &ring::signature::RSA_PKCS1_SHA256,
+                        &rng,
+                        &bytes_to_sign,
+                        &mut signature,
+                    )
+                    .map_err(|_| format!("Could not sign"))?;
+                self.signature = signature;
+            }
         }
         Ok(())
     }
@@ -213,16 +222,18 @@ impl CwtParsed {
     /// The `hcert` is part of the claims in the CWT. The `hcert` itself is a container for multiple different certificates (c.f [Section 2.6.4](https://ec.europa.eu/health/sites/health/files/ehealth/docs/digital-green-certificates_v3_en.pdf)). For the Version 1 of the `DGC` the claim key `1` is used (c.f. [Section 3.3.1](https://ec.europa.eu/health/sites/health/files/ehealth/docs/digital-green-certificates_v1_en.pdf))
     pub fn get_hcert(&self) -> Option<BTreeMap<Value, Value>> {
         match self.message.get(&Value::Integer(HCERT_KEY)) {
-            std::option::Option::Some(Value::Map(hcert)) => match hcert.get(&Value::Integer(HCERT_V1)) {
-                Some(Value::Bytes(hcert)) => serde_cbor::from_reader(&hcert[..]).ok(),
-                _ => None,
-            },
+            std::option::Option::Some(Value::Map(hcert)) => {
+                match hcert.get(&Value::Integer(HCERT_V1)) {
+                    Some(Value::Bytes(hcert)) => serde_cbor::from_reader(&hcert[..]).ok(),
+                    _ => None,
+                }
+            }
             _ => None,
         }
     }
 }
 
-/// Possible verification keys. Either `RSA` or `EC` 
+/// Possible verification keys. Either `RSA` or `EC`
 pub enum VerificationKey {
     /// The elliptic curve key, where `x` and `y` are byte strings of the respective curve point
     Es256 { x: String, y: String },

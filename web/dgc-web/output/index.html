@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="UTF-8">
+  <title>CWT Verifier</title>
+  <link rel="stylesheet" href="https://unpkg.com/purecss@2.0.6/build/pure-min.css"
+    integrity="sha384-Uu6IeWbM+gzNVXJcM9XV3SohHtmWE+3VGi496jvgX1jyvDTXfdK+rfZc8C1Aehk5" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://unpkg.com/purecss@2.0.6/build/grids-responsive-min.css" />
+
+
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body {
+      padding: 20px;
+    }
+
+    .center {
+      display: flex;
+      align-items: center;
+      justify-items: center;
+    }
+
+    #output {
+      margin: auto;
+    }
+
+    textarea {
+      font-family: monospace;
+    }
+    #x {
+      width: 600px;
+    }
+    #y {
+      width: 600px;
+    }
+  </style>
+  <script>
+    function parse() {
+      var cbor = document.getElementById("cbor").value;
+      var json = window.parse_cwt(cbor);
+      var hcert = window.get_hcert(cbor);
+      document.getElementById("json").value = json;
+      document.getElementById("hcert").value = hcert;
+    }
+
+    function verify() {
+      var cbor = document.getElementById("cbor").value;
+      var x = document.getElementById("x").value;
+      var y = document.getElementById("y").value;
+      var success = window.verify_cwt(cbor, {
+        x: x,
+        y: y
+      });
+      if (success) {
+        alert("Signature valid");
+      } else {
+        alert("Signature invalid");
+      }
+    }
+
+    function attach() {
+      document.querySelector('input').addEventListener('change', function () {
+
+        var reader = new FileReader();
+        reader.onload = function () {
+
+          var arrayBuffer = this.result,
+            array = new Uint8Array(arrayBuffer),
+            binaryString = toHex(array);
+
+         document.getElementById("cbor").value = binaryString;
+
+        }
+        reader.readAsArrayBuffer(this.files[0]);
+
+      }, false);
+    }
+    function toHex(buffer) { return Array.prototype.map.call(buffer, x => ('00' + x.toString(16)).slice(-2)).join(''); }
+  </script>
+</head>
+
+<body onload="attach()">
+  <script src="index.js"></script>
+
+  <h1> CWT Verifier</h1>
+  <p>Paste a CWT in a byte string notation and let it parse and verify the signature</p>
+  <input type="file">
+  <div class="pure-g">
+    <div class="pure-u-1 pure-u-md-1-3">
+      <h2>CWT as a byte string</h2>
+      <textarea id="cbor" cols="64" rows="40"></textarea>
+    </div>
+    <div class="pure-u-1-2 pure-u-md-1-3">
+      <h2>Deserialized CWT</h2>
+      <textarea id="json" cols="54" rows="40"></textarea>
+    </div>
+    <div class="pure-u-1-2 pure-u-md-1-3">
+      <h2>Hcert Claim</h2>
+      <textarea id="hcert" cols="54" rows="40"></textarea>
+    </div>
+  </div>
+  <button class="pure-button pure-button-primary" type="submit" id="submitButton" onclick="parse()">
+    parse</button><br /><br />
+  <div class="pure-form pure-form-stacked">
+    <fieldset>
+      <label for="x">X</label>
+      <input id="x" placeholder="X coordinate" type="text"/>
+      <label for="y">Y</label>
+      <input id="y" placeholder="Y coordinate" type="text" />
+      <button class="pure-button pure-button-primary" type="submit" id="submitButton" onclick="verify()">
+        Verify</button><br /><br />
+    </fieldset>
+  </div>
+</body>
+
+</html>
