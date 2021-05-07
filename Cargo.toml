@@ -19,7 +19,7 @@ p256 = "0.8.0"
 simple_asn1 = "0.5.2"
 # zip = { version = "0.5.12", default-features = false, features = ['deflate-zlib'] }
 # flate2 = "1.0.20"
-base45 = "2.0.1"
+# flate2 = "1.0.20"
 
 [[bench]]
 name = "benchmark"

@@ -15,12 +15,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cdb031dd78e28731d87d56cc8ffef4a8f36ca26c38fe2de700543e627f8a464a"
 
 [[package]]
-name = "base45"
-version = "2.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3617d0a1c5c89900609ffa3cd3f3221a25e6c32dfe64958122760ccb717e76f4"
-
-[[package]]
 name = "base64"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -501,7 +495,6 @@ dependencies = [
 name = "rust-dgc"
 version = "0.1.0"
 dependencies = [
- "base45",
  "base64",
  "bencher",
  "getrandom",

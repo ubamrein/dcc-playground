@@ -133,10 +133,10 @@ pub fn decode(base45_string: &str) -> Result<Vec<u8>, InvalidCharacter> {
                 _ => panic!(),
             };
             let bytes = val.to_be_bytes();
-            if val <= u8::MAX as u16 {
+            if c.len() < 3 {
                 vec![bytes[1]]
             } else {
-                bytes.to_vec()
+             bytes.to_vec()
             }
         })
         .collect::<Vec<u8>>())

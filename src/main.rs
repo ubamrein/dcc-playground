@@ -36,7 +36,6 @@ struct Jwk {
     pub crv : Option<String>
 }
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-
    
     let key_list = include_bytes!("list");
     let cwt = get_payload(key_list).unwrap();

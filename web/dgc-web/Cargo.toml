@@ -32,7 +32,6 @@ wee_alloc = { version = "0.4.2", optional = true }
 serde_json = "1.0.64"
 base64 = "0.13.0"
 getrandom = {version = "0.2.2", features = ["js"]}
-base45 = "2.0.1"
 flate2 = {version = "1.0.20", default-features =false, features = ["rust_backend"]}
 # The `web-sys` crate allows you to interact with the various browser APIs,
 # like the DOM.
@@ -49,7 +48,7 @@ console_error_panic_hook = "0.1.5"
 
 # These crates are used for running unit tests.
 [dev-dependencies]
-wasm-bindgen-test = "0.2.45"
-futures = "0.1.27"
+wasm-bindgen-test = "0.3.23"
+# futures = "0.1.27"
 js-sys = "0.3.22"
-wasm-bindgen-futures = "0.3.22"
+# wasm-bindgen-futures = "0.4.23"
