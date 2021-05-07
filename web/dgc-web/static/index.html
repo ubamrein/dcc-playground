@@ -24,6 +24,12 @@
     #output {
       margin: auto;
     }
+    .valid {
+      border: green 2px solid;
+    }
+    .invalid {
+      border: red 2px solid;
+    }
 
     textarea {
       font-family: monospace;
@@ -42,6 +48,7 @@
       var hcert = window.get_hcert(cbor);
       document.getElementById("json").value = json;
       document.getElementById("hcert").value = hcert;
+      verify();
     }
 
     function verify() {
@@ -51,11 +58,21 @@
       var success = window.verify_cwt(cbor, {
         x: x,
         y: y
-      });
+      }, document.getElementById("encoding").value);
       if (success) {
-        alert("Signature valid");
+        document.getElementById("cbor").classList.add("valid");
+        document.getElementById("cbor").classList.remove("invalid");
+        document.getElementById("json").classList.add("valid");
+        document.getElementById("json").classList.remove("invalid");
+        document.getElementById("hcert").classList.add("valid");
+        document.getElementById("hcert").classList.remove("invalid");
       } else {
-        alert("Signature invalid");
+        document.getElementById("cbor").classList.add("invalid");
+        document.getElementById("cbor").classList.remove("valid");
+        document.getElementById("json").classList.add("invalid");
+        document.getElementById("json").classList.remove("valid");
+        document.getElementById("hcert").classList.add("invalid");
+        document.getElementById("hcert").classList.remove("valid");
       }
     }
 
@@ -89,7 +106,7 @@
   <div class="pure-g">
     <div class="pure-u-1 pure-u-md-1-3">
       <h2>CWT as a byte string</h2>
-      <textarea id="cbor" cols="64" rows="40"></textarea>
+      <textarea id="cbor" cols="64" rows="40" oninput="parse()"></textarea>
     </div>
     <div class="pure-u-1-2 pure-u-md-1-3">
       <h2>Deserialized CWT</h2>
@@ -100,16 +117,19 @@
       <textarea id="hcert" cols="54" rows="40"></textarea>
     </div>
   </div>
-  <button class="pure-button pure-button-primary" type="submit" id="submitButton" onclick="parse()">
-    parse</button><br /><br />
+ 
   <div class="pure-form pure-form-stacked">
     <fieldset>
+      <label for="encoding">Encoding</label>
+      <select id="encoding">
+        <option>base64</option>
+        <option>hexstring</option>
+      </select>
       <label for="x">X</label>
-      <input id="x" placeholder="X coordinate" type="text"/>
+      <input id="x" placeholder="X coordinate" type="text" oninput="verify()"/>
       <label for="y">Y</label>
-      <input id="y" placeholder="Y coordinate" type="text" />
-      <button class="pure-button pure-button-primary" type="submit" id="submitButton" onclick="verify()">
-        Verify</button><br /><br />
+      <input id="y" placeholder="Y coordinate" type="text" oninput="verify()"/>
+     
     </fieldset>
   </div>
 </body>

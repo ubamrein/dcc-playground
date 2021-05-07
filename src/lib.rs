@@ -34,7 +34,7 @@ const HCERT_V1: i128 = 1;
 /// ```
 
 pub fn get_payload(raw_payload: &[u8]) -> Result<CwtParsed, Box<dyn std::error::Error>> {
-    let value: serde_cbor::Value = serde_cbor::from_reader(&raw_payload[..]).unwrap();
+    let value: serde_cbor::Value = serde_cbor::from_reader(&raw_payload[..])?;
     let value = match value {
         Value::Array(inner) => inner,
         _ => return Err("not an array".into()),
@@ -62,8 +62,10 @@ pub fn get_payload(raw_payload: &[u8]) -> Result<CwtParsed, Box<dyn std::error::
 
     Ok(CwtParsed {
         protected_headers: protected_headers.clone(),
+        protected_headers_original: value[0].clone(),
         unprotected_headers: unprotected_headers.clone(),
         message: message.clone(),
+        original: value[2].clone(),
         signature: signature.clone(),
     })
 }
@@ -75,7 +77,7 @@ macro_rules! from_byte_string {
         $s.as_bytes()
             .windows(2)
             .step_by(2)
-            .map(|b| u8::from_str_radix(std::str::from_utf8(b).unwrap(), 16).unwrap())
+            .map(|b| u8::from_str_radix(std::str::from_utf8(b).unwrap(), 16).unwrap_or(0))
             .collect::<Vec<_>>()
     };
 }
@@ -98,12 +100,14 @@ pub struct CwtParsed {
     /// since the protected headers are cryptographically signed, we want to prevent accidental
     /// changes, so they are included as a serialized CBOR Map.
     pub protected_headers: serde_cbor::Value,
+    pub protected_headers_original: serde_cbor::Value,
     /// Unprotected headers do not need such protection and as such are just presented as a CBOR Map
     pub unprotected_headers: BTreeMap<Value, Value>,
     /// Since we later on want to get the `hcert` we deserialized the CBOR Byte-String. For the message
     /// the same argumen as for the `protected_headers` is made, as the signature includes the message
     /// payload
     pub message: BTreeMap<Value, Value>,
+    original: serde_cbor::Value,
     /// The signature as a byte string. In the case of `ECDSA` this is just `r || s`
     pub signature: Vec<u8>,
 }
@@ -126,9 +130,12 @@ impl CwtParsed {
                 pk.extend(from_byte_string!(y));
               
                 let point = p256::EncodedPoint::from_bytes(&pk)?;
+               
                 let key = p256::ecdsa::VerifyingKey::from_encoded_point(&point)?;
+                
                 let sig_bytes = self.signature.as_slice();
                 key.verify(&message, &Signature::try_from(sig_bytes)?).is_ok()
+                
             }
             VerificationKey::Rsa { key } => {
                 let key = from_byte_string!(key);
@@ -167,6 +174,7 @@ impl CwtParsed {
                 // let signature = key_pair
                 //     .sign(&rng, &bytes_to_sign)
                 //     .map_err(|_| format!("Could not sign"))?;
+                
                 let key = p256::ecdsa::SigningKey::from_bytes(&pk)?;
                 let signature = key.sign(&bytes_to_sign);
                 self.signature = signature.as_ref().to_vec();
@@ -212,9 +220,9 @@ impl CwtParsed {
     fn get_verification_bytes(&self) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
         let mut verification = vec![];
         verification.push(Value::Text("Signature1".to_string()));
-        verification.push(Value::Bytes(serde_cbor::to_vec(&self.protected_headers)?));
+        verification.push(self.protected_headers_original.clone());
         verification.push(Value::Bytes(vec![]));
-        verification.push(Value::Bytes(serde_cbor::to_vec(&self.message)?));
+        verification.push(self.original.clone());
 
         Ok(serde_cbor::to_vec(&verification)?)
     }
@@ -225,6 +233,7 @@ impl CwtParsed {
             std::option::Option::Some(Value::Map(hcert)) => {
                 match hcert.get(&Value::Integer(HCERT_V1)) {
                     Some(Value::Bytes(hcert)) => serde_cbor::from_reader(&hcert[..]).ok(),
+                    Some(Value::Map(m)) => Some(m.to_owned()),
                     _ => None,
                 }
             }

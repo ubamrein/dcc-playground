@@ -1,8 +1,24 @@
-use rust_dgc::*;
+use std::io::Cursor;
+
+use base45::decode;
+use rust_dgc::{get_payload, from_byte_string, to_byte_string, VerificationKey};
 use wasm_bindgen::prelude::*;
+use std::io::Read;
 
 #[wasm_bindgen]
 pub fn parse_cwt_from_bytestring(cbor_cwt: String) -> String {
+    let cbor_cwt = if cbor_cwt.starts_with("HC1:") {
+        let mut decoded = Cursor::new( base45::decode(&cbor_cwt.replace("HC1:", "")));
+        let mut decompressor = flate2::read::ZlibDecoder::new(&mut decoded);
+        let mut decompressed = vec![];
+        match decompressor.read_to_end(&mut decompressed) {
+            Ok(_) => to_byte_string!(decompressed),
+            Err(r) => "".to_string()
+        }
+    } else {
+        cbor_cwt.replace(" ", "").replace("\n", "")
+    };
+   
     let cbor_bytes = from_byte_string!(cbor_cwt);
     if let Ok(cwt) = get_payload(&cbor_bytes) {
         return serde_json::to_string_pretty(&cwt).unwrap_or("{}".to_string());
@@ -12,6 +28,17 @@ pub fn parse_cwt_from_bytestring(cbor_cwt: String) -> String {
 }
 #[wasm_bindgen]
 pub fn get_hcert_from_cwt(cbor_cwt: String) -> String {
+     let cbor_cwt = if cbor_cwt.starts_with("HC1:") {
+        let mut decoded = Cursor::new( base45::decode(&cbor_cwt.replace("HC1:", "")));
+        let mut decompressor = flate2::read::ZlibDecoder::new(&mut decoded);
+        let mut decompressed = vec![];
+        match decompressor.read_to_end(&mut decompressed) {
+            Ok(_) => to_byte_string!(decompressed),
+            Err(r) => "".to_string()
+        }
+    } else {
+        cbor_cwt.replace(" ", "").replace("\n", "")
+    };
     let cbor_bytes = from_byte_string!(cbor_cwt);
     if let Ok(cwt) = get_payload(&cbor_bytes) {
         return serde_json::to_string_pretty(&cwt.get_hcert()).unwrap_or("{}".to_string());
@@ -21,14 +48,33 @@ pub fn get_hcert_from_cwt(cbor_cwt: String) -> String {
 }
 
 #[wasm_bindgen]
-pub fn verify_cwt_ec(cbor_cwt: String, x: String, y: String) -> bool {
+pub fn verify_cwt_ec(cbor_cwt: String, x: String, y: String, encoding: String) -> bool {
+    let cbor_cwt = if cbor_cwt.starts_with("HC1:") {
+        let mut decoded = Cursor::new( base45::decode(&cbor_cwt.replace("HC1:", "")));
+        let mut decompressor = flate2::read::ZlibDecoder::new(&mut decoded);
+        let mut decompressed = vec![];
+        match decompressor.read_to_end(&mut decompressed) {
+            Ok(_) => to_byte_string!(decompressed),
+            Err(r) => "".to_string()
+        }
+    } else {
+        cbor_cwt.replace(" ", "").replace("\n", "")
+    };
     let cbor_bytes = from_byte_string!(cbor_cwt);
+
     let cwt = if let Ok(cwt) = get_payload(&cbor_bytes) {
         cwt
     } else {
         return false;
     };
-
+    let x = if encoding.to_lowercase() == "base64" {
+        to_byte_string!(base64::decode_config(x, base64::STANDARD_NO_PAD).unwrap_or(vec![]))
+    } else {x};
+    let y = if encoding.to_lowercase() == "base64" {
+        to_byte_string!(base64::decode_config(y, base64::STANDARD_NO_PAD).unwrap_or(vec![]))
+    } else {y};
+    println!("{}", x);
+println!("{}", y);
     let key = VerificationKey::Es256 { x, y };
     match cwt.verify(&key) {
         Ok(_) => true,

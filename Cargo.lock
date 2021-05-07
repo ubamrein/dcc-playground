@@ -15,6 +15,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cdb031dd78e28731d87d56cc8ffef4a8f36ca26c38fe2de700543e627f8a464a"
 
 [[package]]
+name = "base45"
+version = "2.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3617d0a1c5c89900609ffa3cd3f3221a25e6c32dfe64958122760ccb717e76f4"
+
+[[package]]
 name = "base64"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -495,6 +501,7 @@ dependencies = [
 name = "rust-dgc"
 version = "0.1.0"
 dependencies = [
+ "base45",
  "base64",
  "bencher",
  "getrandom",
@@ -504,6 +511,7 @@ dependencies = [
  "serde",
  "serde_cbor",
  "serde_json",
+ "simple_asn1",
  "x509-parser",
 ]
 
@@ -590,6 +598,18 @@ checksum = "0f0242b8e50dd9accdd56170e94ca1ebd223b098eb9c83539a6e367d0f36ae68"
 dependencies = [
  "digest",
  "rand_core",
+]
+
+[[package]]
+name = "simple_asn1"
+version = "0.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6e0e9076e5242ff5a58e854cb478ea9caebce01088f86d3d9c6ad336b7655263"
+dependencies = [
+ "chrono",
+ "num-bigint",
+ "num-traits",
+ "thiserror",
 ]
 
 [[package]]
