@@ -38,110 +38,109 @@ struct Jwk {
 fn main() -> Result<(), Box<dyn std::error::Error>> {
 
    
-    // let key_list = include_bytes!("list");
-    // let cwt = get_payload(key_list).unwrap();
-    // let keys = cwt.message.get(&serde_cbor::Value::Text("c".to_string())).unwrap();
+    let key_list = include_bytes!("list");
+    let cwt = get_payload(key_list).unwrap();
+    let keys = cwt.message.get(&serde_cbor::Value::Text("c".to_string())).unwrap();
 
-    // match keys { 
-    //     serde_cbor::Value::Array(arr) => {
-    //         let jwks = arr.iter().filter_map(|key_entry| {
-    //             match key_entry {
-    //                 serde_cbor::Value::Map(m) => Some(m),
-    //                 _ => None
-    //             }
-    //         }).filter_map(|key| {
-    //             let kid = if let Some(serde_cbor::Value::Bytes(i))= key.get(&serde_cbor::Value::Text("i".to_string())) { base64::encode_config(i, base64::STANDARD)} else { return None};
-    //             match key.get(&serde_cbor::Value::Text("k".to_string())) {
-    //                 Some(serde_cbor::Value::Text(t)) if t == "e" => {
-    //                     let key = if let Some(serde_cbor::Value::Bytes(b)) = key.get(&serde_cbor::Value::Text("p".to_string())) {b.to_owned()} else { return None};
-    //                     let x = base64::encode_config(&key[1..33],base64::STANDARD_NO_PAD);
-    //                     let y = base64::encode_config(&key[33..],base64::STANDARD_NO_PAD);
-    //                     Some(
-    //                         Jwk {
-    //                             kid,
-    //                             x: Some(x),
-    //                             y: Some(y),
-    //                             crv: Some(String::from("P-256")),
-    //                             kty: "EC".to_string(),
-    //                             alg: "ES256".to_string(),
-    //                             r#use: "sig".to_string(),
-    //                             ..Default::default()
-    //                         }
-    //                     )
-    //                 },
-    //                 Some(serde_cbor::Value::Text(t) ) if t == "r" =>{
-    //                     let key = if let Some(serde_cbor::Value::Bytes(b)) = key.get(&serde_cbor::Value::Text("p".to_string())) {b.to_owned()} else { return None};
-    //                     let asn_codes = simple_asn1::from_der(&key).unwrap();
-    //                     match &asn_codes[0] {
-    //                         simple_asn1::ASN1Block::Sequence(seq,a) => {
-    //                             let n = if let simple_asn1::ASN1Block::Integer(_, bi) = &a[0] { base64::encode_config(bi.to_signed_bytes_be(), base64::STANDARD_NO_PAD)} else {return None};
-    //                             let e = if let simple_asn1::ASN1Block::Integer(_, bi) = &a[1] {  base64::encode_config(bi.to_signed_bytes_be(), base64::STANDARD_NO_PAD)} else {return None};
-    //                             return Some(
-    //                                 Jwk {
-    //                                     kid,
-    //                                     n: Some(n),
-    //                                     e: Some(e),
-    //                                     kty: "RSA".to_string(),
-    //                                     alg: "RS256".to_string(),
-    //                                     r#use: "sig".to_string(),
-    //                                     ..Default::default()
-    //                                 }
-    //                             )
+    match keys { 
+        serde_cbor::Value::Array(arr) => {
+            let jwks = arr.iter().filter_map(|key_entry| {
+                match key_entry {
+                    serde_cbor::Value::Map(m) => Some(m),
+                    _ => None
+                }
+            }).filter_map(|key| {
+                let kid = if let Some(serde_cbor::Value::Bytes(i))= key.get(&serde_cbor::Value::Text("i".to_string())) { base64::encode_config(i, base64::STANDARD)} else { return None};
+                match key.get(&serde_cbor::Value::Text("k".to_string())) {
+                    Some(serde_cbor::Value::Text(t)) if t == "e" => {
+                        let key = if let Some(serde_cbor::Value::Bytes(b)) = key.get(&serde_cbor::Value::Text("p".to_string())) {b.to_owned()} else { return None};
+                        let x = base64::encode_config(&key[1..33],base64::STANDARD_NO_PAD);
+                        let y = base64::encode_config(&key[33..],base64::STANDARD_NO_PAD);
+                        Some(
+                            Jwk {
+                                kid,
+                                x: Some(x),
+                                y: Some(y),
+                                crv: Some(String::from("P-256")),
+                                kty: "EC".to_string(),
+                                alg: "ES256".to_string(),
+                                r#use: "sig".to_string(),
+                                ..Default::default()
+                            }
+                        )
+                    },
+                    Some(serde_cbor::Value::Text(t) ) if t == "r" =>{
+                        let key = if let Some(serde_cbor::Value::Bytes(b)) = key.get(&serde_cbor::Value::Text("p".to_string())) {b.to_owned()} else { return None};
+                        let asn_codes = simple_asn1::from_der(&key).unwrap();
+                        match &asn_codes[0] {
+                            simple_asn1::ASN1Block::Sequence(seq,a) => {
+                                let n = if let simple_asn1::ASN1Block::Integer(_, bi) = &a[0] { base64::encode_config(bi.to_signed_bytes_be(), base64::STANDARD_NO_PAD)} else {return None};
+                                let e = if let simple_asn1::ASN1Block::Integer(_, bi) = &a[1] {  base64::encode_config(bi.to_signed_bytes_be(), base64::STANDARD_NO_PAD)} else {return None};
+                                return Some(
+                                    Jwk {
+                                        kid,
+                                        n: Some(n),
+                                        e: Some(e),
+                                        kty: "RSA".to_string(),
+                                        alg: "RS256".to_string(),
+                                        r#use: "sig".to_string(),
+                                        ..Default::default()
+                                    }
+                                )
                                 
-    //                         },
-    //                         _ => return None
-    //                     }
-    //                 },
-    //                 _ => return None
-    //             }
-    //         }).collect::<Vec<Jwk>>();
-    //         println!("{:}", serde_json::to_string(&jwks).unwrap());
-    //     }
-    //     _ => panic!()
-    // }
-    // println!("{:?}",cwt.message);
-    // return Ok(());
+                            },
+                            _ => return None
+                        }
+                    },
+                    _ => return None
+                }
+            }).collect::<Vec<Jwk>>();
+            println!("{:}", serde_json::to_string(&jwks).unwrap());
+        }
+        _ => panic!()
+    }
+    println!("{:?}",cwt.message);
+    return Ok(());
     
     // let cwt_bit = get_payload(&from_byte_string!(BIT_NEW)).unwrap();
     // println!("{}", serde_json::to_string_pretty(&cwt_bit.get_hcert().unwrap()).unwrap());
     // return Ok(());
 
-    println!("Verify swedish CWT");
-    let mut test_se =Cursor::new( base45::decode(&ehnVaccinationCert));
-    let mut za = flate2::Decompress::new(true);
-    
-    let mut new_bytes = vec![];
-    za.read_to_end(&mut new_bytes).unwrap();
-    let cwt = get_payload(&new_bytes).unwrap();
-    println!("{:x?}",serde_json::to_string_pretty(&cwt.get_hcert().unwrap()));
+    // println!("Verify swedish CWT");
+    // let mut test_se =Cursor::new( base45::decode(&ehnVaccinationCert));
+    // let mut za = flate2::read::ZlibDecoder::new(&mut test_se);
+    // let mut new_bytes = vec![];
+    // za.read_to_end(&mut new_bytes).unwrap();
+    // let cwt = get_payload(&new_bytes).unwrap();
+    // println!("{:x?}",serde_json::to_string_pretty(&cwt.get_hcert().unwrap()));
 
-    let data_bytes = base64::decode(public_part_se)?;
-    let (_,cert) = parse_x509_certificate(&data_bytes)?;
+    // let data_bytes = base64::decode(public_part_se)?;
+    // let (_,cert) = parse_x509_certificate(&data_bytes)?;
     
-    let key = cert.tbs_certificate.subject_pki.subject_public_key.data;
-    let x = to_byte_string!(&key[1..33]);
-    let y = to_byte_string!(&key[33..]);
+    // let key = cert.tbs_certificate.subject_pki.subject_public_key.data;
+    // let x = to_byte_string!(&key[1..33]);
+    // let y = to_byte_string!(&key[33..]);
    
 
-    println!("x: {}", base64::encode(&key[1..33]));
-    println!("y: {}", base64::encode(&key[33..]));
-    let key = VerificationKey::Es256 {
-        x,
-        y
-    };
-    println!("{:?}", cwt.verify(&key));
-    return Ok(());
+    // println!("x: {}", base64::encode(&key[1..33]));
+    // println!("y: {}", base64::encode(&key[33..]));
+    // let key = VerificationKey::Es256 {
+    //     x,
+    //     y
+    // };
+    // println!("{:?}", cwt.verify(&key));
+    // return Ok(());
 
-    let bytes: Vec<u8> = from_byte_string!(RFC_TEST);
+    // let bytes: Vec<u8> = from_byte_string!(RFC_TEST);
 
-    let key = VerificationKey::Es256 {
-        x: "143329cce7868e416927599cf65a34f3ce2ffda55a7eca69ed8919a394d42f0f".to_string(),
-        y: "60f7f1a780d8a783bfb7a2dd6b2796e8128dbbcef9d3d168db9529971a36e7b9".to_string(),
-    };
+    // let key = VerificationKey::Es256 {
+    //     x: "143329cce7868e416927599cf65a34f3ce2ffda55a7eca69ed8919a394d42f0f".to_string(),
+    //     y: "60f7f1a780d8a783bfb7a2dd6b2796e8128dbbcef9d3d168db9529971a36e7b9".to_string(),
+    // };
 
-    println!("Verify CWT taken from RFC");
-    let cwt = get_payload(&bytes)?;
-    println!("Signature was {:?}",cwt.verify(&key));
+    // println!("Verify CWT taken from RFC");
+    // let cwt = get_payload(&bytes)?;
+    // println!("Signature was {:?}",cwt.verify(&key));
 
 
     // println!("Verify swedish CWT");
@@ -151,23 +150,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // za.read_to_end(&mut new_bytes).unwrap();
     // println!("{:x?}", new_bytes);
     
-    let cwt = get_payload(&new_bytes)?;
-    let data_bytes = base64::decode(public_part_se)?;
-    let (_,cert) = parse_x509_certificate(&data_bytes)?;
+    // let cwt = get_payload(&new_bytes)?;
+    // let data_bytes = base64::decode(public_part_se)?;
+    // let (_,cert) = parse_x509_certificate(&data_bytes)?;
     
-    println!("{:x?}", cert);
-    let key = cert.tbs_certificate.subject_pki.subject_public_key.data;
-    println!("{}", to_byte_string!(key));
-    let y = to_byte_string!(&key[33..]);
-    let x = to_byte_string!(&key[1..33]);
-    println!("{}", x);
-    println!("{}", y);
-    let key = VerificationKey::Es256 {
-        x,
-        y
-    };
-    println!("{:x?}", cwt);
-    println!("Signature was {:?}", cwt.verify(&key));
+    // println!("{:x?}", cert);
+    // let key = cert.tbs_certificate.subject_pki.subject_public_key.data;
+    // println!("{}", to_byte_string!(key));
+    // let y = to_byte_string!(&key[33..]);
+    // let x = to_byte_string!(&key[1..33]);
+    // println!("{}", x);
+    // println!("{}", y);
+    // let key = VerificationKey::Es256 {
+    //     x,
+    //     y
+    // };
+    // println!("{:x?}", cwt);
+    // println!("Signature was {:?}", cwt.verify(&key));
 
     // let bytes: Vec<u8> = from_byte_string!(HCERT);
     // let mut cwt_hcert = get_payload(&bytes)?;
