@@ -97,6 +97,39 @@
       }
     }
 
+    function retrieveImageFromClipboardAsBlob(pasteEvent) {
+      
+      if(pasteEvent.clipBoardData == false) {
+        return;
+      }
+      var items = pasteEvent.clipboardData.files;
+      if(items == undefined) {
+        return;
+      }
+      for (var i = 0; i < items.length; i++) {
+        // Skip content if not image
+        if (items[i].type.indexOf("image") == -1) continue;
+        document.getElementById("cbor").value = "loading from QR-Code...";
+        // Retrieve image on clipboard as blob
+        var reader = new FileReader();
+        reader.readAsDataURL(items[i]);
+        reader.onload = function() {
+          document.getElementById("cbor").readOnly = false;
+          var result = window.get_qr_code_payload(reader.result);
+          document.getElementById("cbor").value = result;
+          parse();
+          verify();
+        }
+        reader.onerror = function(e) {
+          document.getElementById("cbor").readOnly = false;
+          console.log(e);
+        }
+        event.preventDefault();
+        return
+      }
+      return;
+    }
+
     function algorithmChanged() {
       var alg = document.getElementById("algorithm").value;
       if (alg == "RSA") {
@@ -110,6 +143,9 @@
     }
 
     function attach() {
+      window.addEventListener("paste", function(e) {
+          retrieveImageFromClipboardAsBlob(e)
+      })
       document.querySelector('input').addEventListener('change', function () {
 
         var reader = new FileReader();
@@ -134,7 +170,9 @@
   <script src="index.js"></script>
 
   <h1> CWT Verifier</h1>
-  <p>Paste a CWT in a byte string notation and let it parse and verify the signature</p>
+  <p>Paste a CWT as a Hex-String, as a Base45-Prefixed string or as a QR-Code picture. The parser tries to find the correct decoding, and should present a deserialized CWT (in a JSON representation) and the HCERT claim. Further, if the bounding box of the textareas are green, the signature should be valid. 
+    Use the file input field to upload a binary blob of CBOR data.
+  </p>
   <input type="file">
   <h2>Cwt MetaInfo</h2>
   <div class="pure-g">
@@ -160,6 +198,7 @@
     </div>
   </div>
  
+  <h3>Choose the algorithm. Default for Switzerland is RSA</h3>
    <div class="pure-form pure-form-stacked">
      <fieldset>
        <select id="algorithm" onchange="algorithmChanged()">
@@ -171,6 +210,7 @@
    </div>
 
   <div id="ec" class="pure-form pure-form-stacked hidden">
+    <h3>Specify the encoding of the X/Y coordinates of the public keys as well as the coordinates themselves.</h3>
     <fieldset>
       <label for="encoding">Encoding</label>
       <select id="encoding">
@@ -185,13 +225,14 @@
   </div>
   
   <div id="rsa" class="pure-form pure-form-stacked">
+    <h3>The keys for the different environments are hardcoded. Double check the KeyID here with the KeyId in the MetaInfo.</h3>
     <fieldset>
       <label for="environment">Environment</label>
       <p id="keyId">KeyId: mmrfzpMU6xc=</p>
       <select id="environment" onchange="verify()">
         <option>dev</option>
         <option>abn</option>
-        <option>prod</option>
+        <!-- <option>prod</option> -->
       </select>
     </fieldset>
   </div>

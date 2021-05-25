@@ -12,6 +12,10 @@ import("../pkg/index.js").then(m => {
     };
     window.get_cwt_info = (cwt) => {
         return m.get_cwt_info(cwt)
+    };
+    window.get_qr_code_payload = (image) => {
+        var data = image.split(",")[1].trim();
+        return m.get_qr_code_data(data)
     }
     window.get_hcert = m.get_hcert_from_cwt;
 }).catch(console.error);

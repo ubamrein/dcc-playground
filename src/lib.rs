@@ -1,10 +1,32 @@
 use std::collections::BTreeMap;
-
+use image::{DynamicImage, GenericImageView, GrayImage};
 use serde_cbor::Value;
 
 pub mod base45;
 const HCERT_KEY: i128 = -260;
 const HCERT_V1: i128 = 1;
+
+
+pub fn decode_qr(img: &[u8]) -> Result<String, Box<dyn std::error::Error>> {
+    let image = image::load_from_memory(img)?.to_luma8();
+    let mut img = rqrr::PreparedImage::prepare(image);
+    let grids = img.detect_grids();
+    for g in grids {
+        let (meta, content) = g.decode()?;
+        return Ok (content);
+    }
+    return Err("No data".into());
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_qrcode() {
+        let img = include_bytes!("test_imgs/test_code.png");
+        let result = super::decode_qr(img).unwrap();
+        println!("{}", result);
+    }
+}
 
 pub fn get_meta(raw_payload: &[u8]) -> Result<MetaInfo, Box<dyn std::error::Error>> {
     let value: serde_cbor::Value = serde_cbor::from_reader(&raw_payload[..])?;

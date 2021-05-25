@@ -15,6 +15,14 @@ const ABN_KEY : [&str;2] = [
 const ABN_KEY_ID: &str = "";
 
 #[wasm_bindgen]
+pub fn get_qr_code_data(image: String) -> String {
+    if let Ok(data) = base64::decode(&image) {
+        return rust_dgc::decode_qr(&data).unwrap_or(String::from(""))
+    }
+    return String::from("")
+}
+
+#[wasm_bindgen]
 pub fn parse_cwt_from_bytestring(cbor_cwt: String) -> String {
     let cbor_cwt = if cbor_cwt.starts_with("HC1:") {
         let mut decoded =
