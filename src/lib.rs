@@ -6,6 +6,96 @@ pub mod base45;
 const HCERT_KEY: i128 = -260;
 const HCERT_V1: i128 = 1;
 
+pub fn get_meta(raw_payload: &[u8]) -> Result<MetaInfo, Box<dyn std::error::Error>> {
+    let value: serde_cbor::Value = serde_cbor::from_reader(&raw_payload[..])?;
+    let value = match value {
+        Value::Array(inner) => inner,
+        _ => return Err("not an array".into()),
+    };
+    let protected_headers = match &value[0] {
+        Value::Bytes(b) => b,
+        _ => return Err("No protected headers".into()),
+    };
+
+    let message = match &value[2] {
+        Value::Bytes(b) => b,
+        _ => return Err("no message".into()),
+    };
+
+    let protected_headers: serde_cbor::Value = serde_cbor::from_reader(&protected_headers[..])?;
+
+    let unprotected_headers = match &value[1] {
+        Value::Map(m) => m,
+        _ => return Err("No unprotected headers".into()),
+    };
+
+    let message: BTreeMap<Value, Value> = serde_cbor::from_reader(&message[..])?;
+
+    let (alg, key_id) = match protected_headers {
+        Value::Map(m) => {
+            let alg = m.get(&Value::Integer(1)).ok_or("Not found")?;
+            let alg = match alg {
+                Value::Integer(i) => {
+                    match i {
+                        -7 => "EC".to_string(),
+                        -37 => "RSA".to_string(),
+                        _ => i.to_string()
+                    }
+                },
+                _ => return Err("Should be integer".into()),
+            };
+            let key_id = m
+                .get(&Value::Integer(4))
+                .or(unprotected_headers.get(&Value::Integer(4)))
+                .ok_or_else(|| "KeyId not found")?;
+            let key_id = match key_id {
+                Value::Bytes(b) => {
+                    base64::encode(b)
+                }
+                _ => {
+                    return Err("keyId should be a bytearray".into());
+                }
+            };
+            
+            (alg, key_id)
+        }
+        _ => return Err("Protected headers is not a map".into()),
+    };
+    let exp = message.get(&Value::Integer(4)).and_then(|f|{
+        match f {
+            Value::Integer(i) => {
+                Some(*i)
+            }
+            _ => Some(0)
+        }
+    }).unwrap_or(0);
+    let iat = message.get(&Value::Integer(6)).and_then(|f|{
+        match f {
+            Value::Integer(i) => {
+                Some(*i)
+            }
+            _ => Some(0)
+        }
+    }).unwrap_or(0);
+
+    let iss = message.get(&Value::Integer(1)).and_then(|f|{
+        match f {
+            Value::Text(i) => {
+                Some(i.to_owned())
+            }
+            _ => Some(String::new())
+        }
+    }).unwrap_or(String::new());
+
+    Ok(MetaInfo {
+        alg,
+        key_id,
+        exp: exp as u64,
+        iat: iat as u64,
+        iss
+    })
+}
+
 /// Get the CWT payload, which according to [RFC-8392 Section-7](https://tools.ietf.org/html/rfc8392#section-7)
 /// is just the `Cose_Sign1` Struct from [RFC-8152 Section-4.2](https://tools.ietf.org/html/rfc8152#section-4.2)
 /// This means we have a CBOR-Array like this, where the `Headers` defines the Algorithm used and `payload` contains
@@ -92,7 +182,14 @@ macro_rules! to_byte_string {
             .join("")
     };
 }
-
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+pub struct MetaInfo {
+    alg: String,
+    key_id: String,
+    iss: String,
+    exp: u64,
+    iat: u64,
+}
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 /// The parsed CWT struct
 pub struct CwtParsed {
@@ -111,8 +208,12 @@ pub struct CwtParsed {
     /// The signature as a byte string. In the case of `ECDSA` this is just `r || s`
     pub signature: Vec<u8>,
 }
-use p256::ecdsa::{Signature, signature::{Verifier, Signer}};
+use p256::ecdsa::{
+    signature::{Signer, Verifier},
+    Signature,
+};
 use std::convert::TryFrom;
+use x509_parser::num_bigint::Sign;
 impl CwtParsed {
     /// Verify the signature present in the CWT with the given [VerificationKey]
     pub fn verify(&self, key: &VerificationKey) -> Result<(), Box<dyn std::error::Error>> {
@@ -120,39 +221,37 @@ impl CwtParsed {
             Ok(v) => v,
             _ => return Err("Could not decode".into()),
         };
-        let success =match key {
+        let success = match key {
             VerificationKey::Es256 { x, y } => {
-               
                 // #[cfg(not(target = "wasm32"))]
                 let mut pk = Vec::with_capacity(65);
                 pk.push(0x04u8);
                 pk.extend(from_byte_string!(x));
                 pk.extend(from_byte_string!(y));
-              
+
                 let point = p256::EncodedPoint::from_bytes(&pk)?;
-               
+
                 let key = p256::ecdsa::VerifyingKey::from_encoded_point(&point)?;
-                
+
                 let sig_bytes = self.signature.as_slice();
-                key.verify(&message, &Signature::try_from(sig_bytes)?).is_ok()
-                
+                key.verify(&message, &Signature::try_from(sig_bytes)?)
+                    .is_ok()
             }
             VerificationKey::Rsa { key } => {
                 let key = from_byte_string!(key);
-               
+
                 let pk = ring::signature::UnparsedPublicKey::new(
-                    &ring::signature::RSA_PKCS1_2048_8192_SHA256,
+                    &ring::signature::RSA_PSS_2048_8192_SHA256,
                     &key,
                 );
                 pk.verify(&message, &self.signature).is_ok()
             }
         };
         if success {
-            return Ok(())
+            return Ok(());
         } else {
-            return Err("verification error".into())
+            return Err("verification error".into());
         }
-        
     }
 
     /// Sign the CWT with the given [SigningKey]. Overwrites the `siganture` field of `self`.
@@ -174,7 +273,7 @@ impl CwtParsed {
                 // let signature = key_pair
                 //     .sign(&rng, &bytes_to_sign)
                 //     .map_err(|_| format!("Could not sign"))?;
-                
+
                 let key = p256::ecdsa::SigningKey::from_bytes(&pk)?;
                 let signature = key.sign(&bytes_to_sign);
                 self.signature = signature.as_ref().to_vec();
@@ -250,6 +349,34 @@ pub enum VerificationKey {
     /// Note that OpenSSL usually encodes keys as a [SubjectPublicKeyInfo](https://tools.ietf.org/html/rfc5280#section-4.1).
     /// Visit the [ring Documentation](https://briansmith.org/rustdoc/ring/signature/index.html#signing-and-verifying-with-rsa-pkcs1-15-padding) for more information on extracting the correct form.
     Rsa { key: String },
+}
+
+impl VerificationKey {
+    pub fn rsa_from_n_and_e(
+        n: &str,
+        e: &str,
+    ) -> Result<VerificationKey, Box<dyn std::error::Error>> {
+        let n = base64::decode(n)?;
+        let e = base64::decode(e)?;
+
+        let sequence: simple_asn1::ASN1Block = simple_asn1::ASN1Block::Sequence(
+            0,
+            vec![
+                simple_asn1::ASN1Block::Integer(
+                    0,
+                    simple_asn1::BigInt::from_bytes_be(Sign::Plus, &n),
+                ),
+                simple_asn1::ASN1Block::Integer(
+                    0,
+                    simple_asn1::BigInt::from_bytes_be(Sign::Plus, &e),
+                ),
+            ],
+        );
+        let key = simple_asn1::to_der(&sequence)?;
+        Ok(VerificationKey::Rsa {
+            key: to_byte_string!(key),
+        })
+    }
 }
 
 /// Possible SigningKeys. We allow `RSA` or `EC`.

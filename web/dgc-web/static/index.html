@@ -31,6 +31,10 @@
       border: red 2px solid;
     }
 
+    .hidden {
+      display: none;
+    }
+
     textarea {
       font-family: monospace;
     }
@@ -46,6 +50,8 @@
       var cbor = document.getElementById("cbor").value;
       var json = window.parse_cwt(cbor);
       var hcert = window.get_hcert(cbor);
+      var info = window.get_cwt_info(cbor);
+      document.getElementById("info").innerText = info;
       document.getElementById("json").value = json;
       document.getElementById("hcert").value = hcert;
       verify();
@@ -55,10 +61,25 @@
       var cbor = document.getElementById("cbor").value;
       var x = document.getElementById("x").value;
       var y = document.getElementById("y").value;
-      var success = window.verify_cwt(cbor, {
-        x: x,
-        y: y
-      }, document.getElementById("encoding").value);
+      var success = false;
+      if(document.getElementById("algorithm").value == "EC") {
+        success = window.verify_cwt(cbor, {
+          x: x,
+          y: y
+        }, document.getElementById("encoding").value);
+
+      } else {
+        var environment = document.getElementById("environment").value;
+        if (environment == "abn") {
+          document.getElementById("keyId").innerText = "KeyId: JLxre3vSwyg=";
+        } else if (environment == "dev") {
+          document.getElementById("keyId").innerText = "KeyId: mmrfzpMU6xc="
+        }
+         success = window.verify_cwt_with_env(cbor, environment)
+         
+      }
+      
+      
       if (success) {
         document.getElementById("cbor").classList.add("valid");
         document.getElementById("cbor").classList.remove("invalid");
@@ -74,6 +95,18 @@
         document.getElementById("hcert").classList.add("invalid");
         document.getElementById("hcert").classList.remove("valid");
       }
+    }
+
+    function algorithmChanged() {
+      var alg = document.getElementById("algorithm").value;
+      if (alg == "RSA") {
+        document.getElementById("ec").classList.add("hidden");
+        document.getElementById("rsa").classList.remove("hidden");
+      } else {
+        document.getElementById("rsa").classList.add("hidden");
+        document.getElementById("ec").classList.remove("hidden");
+      }
+      verify()
     }
 
     function attach() {
@@ -103,22 +136,41 @@
   <h1> CWT Verifier</h1>
   <p>Paste a CWT in a byte string notation and let it parse and verify the signature</p>
   <input type="file">
+  <h2>Cwt MetaInfo</h2>
+  <div class="pure-g">
+    
+    <div class="pure-u-1 pure-u-md-1-3">
+      <p id="info">
+
+      </p>
+    </div>
+  </div>
   <div class="pure-g">
     <div class="pure-u-1 pure-u-md-1-3">
       <h2>CWT as a byte string</h2>
       <textarea id="cbor" cols="64" rows="40" oninput="parse()"></textarea>
     </div>
-    <div class="pure-u-1-2 pure-u-md-1-3">
+    <div class="pure-u-1 pure-u-md-1-3">
       <h2>Deserialized CWT</h2>
       <textarea id="json" cols="54" rows="40"></textarea>
     </div>
-    <div class="pure-u-1-2 pure-u-md-1-3">
+    <div class="pure-u-1 pure-u-md-1-3">
       <h2>Hcert Claim</h2>
       <textarea id="hcert" cols="54" rows="40"></textarea>
     </div>
   </div>
  
-  <div class="pure-form pure-form-stacked">
+   <div class="pure-form pure-form-stacked">
+     <fieldset>
+       <select id="algorithm" onchange="algorithmChanged()">
+         <option>RSA</option>
+         <option>EC</option>
+       </select>
+     </fieldset>
+
+   </div>
+
+  <div id="ec" class="pure-form pure-form-stacked hidden">
     <fieldset>
       <label for="encoding">Encoding</label>
       <select id="encoding">
@@ -129,9 +181,19 @@
       <input id="x" placeholder="X coordinate" type="text" oninput="verify()"/>
       <label for="y">Y</label>
       <input id="y" placeholder="Y coordinate" type="text" oninput="verify()"/>
-     
+    </fieldset>
+  </div>
+  
+  <div id="rsa" class="pure-form pure-form-stacked">
+    <fieldset>
+      <label for="environment">Environment</label>
+      <p id="keyId">KeyId: mmrfzpMU6xc=</p>
+      <select id="environment" onchange="verify()">
+        <option>dev</option>
+        <option>abn</option>
+        <option>prod</option>
+      </select>
     </fieldset>
   </div>
 </body>
-
 </html>
