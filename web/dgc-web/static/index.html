@@ -24,9 +24,11 @@
     #output {
       margin: auto;
     }
+
     .valid {
       border: green 2px solid;
     }
+
     .invalid {
       border: red 2px solid;
     }
@@ -38,9 +40,11 @@
     textarea {
       font-family: monospace;
     }
+
     #x {
       width: 600px;
     }
+
     #y {
       width: 600px;
     }
@@ -49,6 +53,13 @@
     function parse() {
       var cbor = document.getElementById("cbor").value;
       var json = window.parse_cwt(cbor);
+      if (json == "{}") {
+        var result = window.get_qr_code_payload(`base64,${cbor}`);
+        document.getElementById("cbor").value = result;
+        cbor = document.getElementById("cbor").value;
+        json = window.parse_cwt(cbor);
+      }
+
       var hcert = window.get_hcert(cbor);
       var info = window.get_cwt_info(cbor);
       document.getElementById("info").innerText = info;
@@ -62,7 +73,7 @@
       var x = document.getElementById("x").value;
       var y = document.getElementById("y").value;
       var success = false;
-      if(document.getElementById("algorithm").value == "EC") {
+      if (document.getElementById("algorithm").value == "EC") {
         success = window.verify_cwt(cbor, {
           x: x,
           y: y
@@ -74,12 +85,14 @@
           document.getElementById("keyId").innerText = "KeyId: JLxre3vSwyg=";
         } else if (environment == "dev") {
           document.getElementById("keyId").innerText = "KeyId: mmrfzpMU6xc="
+        } else if (environment == "prod") {
+          document.getElementById("keyId").innerText = "KeyId: Ll3NP03zOxY="
         }
-         success = window.verify_cwt_with_env(cbor, environment)
-         
+        success = window.verify_cwt_with_env(cbor, environment)
+
       }
-      
-      
+
+
       if (success) {
         document.getElementById("cbor").classList.add("valid");
         document.getElementById("cbor").classList.remove("invalid");
@@ -98,12 +111,12 @@
     }
 
     function retrieveImageFromClipboardAsBlob(pasteEvent) {
-      
-      if(pasteEvent.clipBoardData == false) {
+
+      if (pasteEvent.clipBoardData == false) {
         return;
       }
       var items = pasteEvent.clipboardData.files;
-      if(items == undefined) {
+      if (items == undefined) {
         return;
       }
       for (var i = 0; i < items.length; i++) {
@@ -113,14 +126,14 @@
         // Retrieve image on clipboard as blob
         var reader = new FileReader();
         reader.readAsDataURL(items[i]);
-        reader.onload = function() {
+        reader.onload = function () {
           document.getElementById("cbor").readOnly = false;
           var result = window.get_qr_code_payload(reader.result);
           document.getElementById("cbor").value = result;
           parse();
           verify();
         }
-        reader.onerror = function(e) {
+        reader.onerror = function (e) {
           document.getElementById("cbor").readOnly = false;
           console.log(e);
         }
@@ -143,26 +156,42 @@
     }
 
     function attach() {
-      window.addEventListener("paste", function(e) {
-          retrieveImageFromClipboardAsBlob(e)
+      window.addEventListener("paste", function (e) {
+        retrieveImageFromClipboardAsBlob(e)
       })
-      document.querySelector('input').addEventListener('change', function () {
+      document.getElementById('binaryblob').addEventListener('change', function () {
 
         var reader = new FileReader();
         reader.onload = function () {
-
           var arrayBuffer = this.result,
             array = new Uint8Array(arrayBuffer),
             binaryString = toHex(array);
 
-         document.getElementById("cbor").value = binaryString;
+          document.getElementById("cbor").value = binaryString;
 
         }
         reader.readAsArrayBuffer(this.files[0]);
 
       }, false);
+
+      document.getElementById('imagefile').addEventListener('change', function () {
+document.getElementById("cbor").value = "Loading from Image...";
+        var reader = new FileReader();
+        reader.onload = function () {
+          
+            var result = window.get_qr_code_payload(this.result);
+          document.getElementById("cbor").value = result;
+          parse();
+          verify();
+        }
+        reader.readAsDataURL(this.files[0]);
+
+      }, false);
     }
-    function toHex(buffer) { return Array.prototype.map.call(buffer, x => ('00' + x.toString(16)).slice(-2)).join(''); }
+
+    function toHex(buffer) {
+      return Array.prototype.map.call(buffer, x => ('00' + x.toString(16)).slice(-2)).join('');
+    }
   </script>
 </head>
 
@@ -170,13 +199,24 @@
   <script src="index.js"></script>
 
   <h1> CWT Verifier</h1>
-  <p>Paste a CWT as a Hex-String, as a Base45-Prefixed string or as a QR-Code picture. The parser tries to find the correct decoding, and should present a deserialized CWT (in a JSON representation) and the HCERT claim. Further, if the bounding box of the textareas are green, the signature should be valid. 
+  <p>Paste a CWT as a Hex-String, as a Base45-Prefixed string or as a QR-Code picture. The parser tries to find the
+    correct decoding, and should present a deserialized CWT (in a JSON representation) and the HCERT claim. Further, if
+    the bounding box of the textareas are green, the signature should be valid.
     Use the file input field to upload a binary blob of CBOR data.
   </p>
-  <input type="file">
+  <div class="pure-form pure-form-stacked">
+    <label for="binaryblob">CBOR Binary Blob</label>
+    <input id="binaryblob" type="file">
+  </div>
+  <br />
+  <div class="pure-form pure-form-stacked">
+    <label for="imagefile">Image File</label>
+    <input id="imagefile" type="file">
+  </div>
+
   <h2>Cwt MetaInfo</h2>
   <div class="pure-g">
-    
+
     <div class="pure-u-1 pure-u-md-1-3">
       <p id="info">
 
@@ -197,17 +237,17 @@
       <textarea id="hcert" cols="54" rows="40"></textarea>
     </div>
   </div>
- 
-  <h3>Choose the algorithm. Default for Switzerland is RSA</h3>
-   <div class="pure-form pure-form-stacked">
-     <fieldset>
-       <select id="algorithm" onchange="algorithmChanged()">
-         <option>RSA</option>
-         <option>EC</option>
-       </select>
-     </fieldset>
 
-   </div>
+  <h3>Choose the algorithm. Default for Switzerland is RSA</h3>
+  <div class="pure-form pure-form-stacked">
+    <fieldset>
+      <select id="algorithm" onchange="algorithmChanged()">
+        <option>RSA</option>
+        <option>EC</option>
+      </select>
+    </fieldset>
+
+  </div>
 
   <div id="ec" class="pure-form pure-form-stacked hidden">
     <h3>Specify the encoding of the X/Y coordinates of the public keys as well as the coordinates themselves.</h3>
@@ -218,23 +258,25 @@
         <option>hexstring</option>
       </select>
       <label for="x">X</label>
-      <input id="x" placeholder="X coordinate" type="text" oninput="verify()"/>
+      <input id="x" placeholder="X coordinate" type="text" oninput="verify()" />
       <label for="y">Y</label>
-      <input id="y" placeholder="Y coordinate" type="text" oninput="verify()"/>
+      <input id="y" placeholder="Y coordinate" type="text" oninput="verify()" />
     </fieldset>
   </div>
-  
+
   <div id="rsa" class="pure-form pure-form-stacked">
-    <h3>The keys for the different environments are hardcoded. Double check the KeyID here with the KeyId in the MetaInfo.</h3>
+    <h3>The keys for the different environments are hardcoded. Double check the KeyID here with the KeyId in the
+      MetaInfo.</h3>
     <fieldset>
       <label for="environment">Environment</label>
       <p id="keyId">KeyId: mmrfzpMU6xc=</p>
       <select id="environment" onchange="verify()">
         <option>dev</option>
         <option>abn</option>
-        <!-- <option>prod</option> -->
+        <option>prod</option>
       </select>
     </fieldset>
   </div>
 </body>
+
 </html>

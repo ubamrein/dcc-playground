@@ -70,8 +70,8 @@ pub fn encode(bytes: &[u8]) -> String {
         String::from_utf8_unchecked(
             bytes
                 .chunks(2)
-                .flat_map(|b| {
-                    let val = u16::from_be_bytes(b.try_into().unwrap_or([0, b[0]]));
+                .flat_map(|bytes| {
+                    let val = u16::from_be_bytes(bytes.try_into().unwrap_or([0, bytes[0]]));
                     let a = val % ALPHABET_LEN;
                     let b = val / ALPHABET_LEN % ALPHABET_LEN;
                     let c = val / ALPHABET_LEN_SQUARED % ALPHABET_LEN;
@@ -80,7 +80,7 @@ pub fn encode(bytes: &[u8]) -> String {
                     // let c  = 0;
 
                     // if we only have one byte in the last chunk, it is encoded with two bytes instead of three
-                    if val <= u8::MAX as u16 {
+                    if bytes.len() < 2{
                         vec![ALPHABET[a as usize] as u8, ALPHABET[b as usize] as u8]
                     } else {
                         vec![

@@ -1,6 +1,12 @@
 use std::io::Cursor;
 
+use flate2::Compression;
+use image::{ImageBuffer, Luma, RgbImage, Rgba};
+use p256::ecdsa::VerifyingKey;
+use rand::{rngs::OsRng, thread_rng};
+use ring::signature::{ECDSA_P256_SHA256_ASN1_SIGNING, ECDSA_P256_SHA256_FIXED_SIGNING, EcdsaKeyPair};
 use rust_dgc::{SigningKey, VerificationKey, from_byte_string, get_payload, to_byte_string};
+use serde_cbor::Value;
 
 const RFC_TEST : &str = "d28443a10126a104524173796d6d657472696345434453413235365850a70175636f61703a2f2f61732e6578616d706c652e636f6d02656572696b77037818636f61703a2f2f6c696768742e6578616d706c652e636f6d041a5612aeb0051a5610d9f0061a5610d9f007420b7158405427c1ff28d23fbad1f29c4c7c6a555e601d6fa29f9179bc3d7438bacaca5acd08c8d4d4f96131680c429a01f85951ecee743a52b9b63632c57209120e1c9e30";
 
@@ -21,6 +27,8 @@ const BIT_CWT: &str = "d28444a1013824a1044843415554494f4e21590177a401624348041b0
 const BIT_NEW: &str = 
 "d28444a1013824a1044843415554494f4e21590117a401624348041b00701cd2fa9578ff061a6094d9a9390103a101a4617681aa626369782630313a43483a324137413633363544444644343433454138303430413236413245303442413462636f62434862646e016264746a323032312d30342d3237626973781942756e646573616d742066c3bc7220476573756e6468656974626d61781f4d6f6465726e6120537769747a65726c616e6420476d62482c20426173656c626d7065363832363762736402627467693834303533393030366276706a3131313933343930303763646f626a313934332d30322d3031636e616da462666e674dc3bc6c6c657262676e6743c3a96c696e6563666e74674d75656c6c657263676e746643656c696e656376657265312e302e30581d43415554494f4e212054686973206973206a75737420612066616b6521";
 
+const HCERT_LI: &str = "HC1:NCFOXN%TSMAHN-HOPCB1PZ5H$SD8+JM52WEL1WG+MP RIXF5K3E$E08WA6AVO91:ZH6I1$4JM:IN1MPK9V L*H1VUU8C1VTE5ZM3763WUH*MLAVPEH.9VS+1M3N8*UFB6SH932QZJD+G9EPL.Q6846A$QY76QW6:C1:667C07ZD$J4VIJGDB7LKUTIPOJ2EA1NJSVBMOJ06J.ZJUIIQHS3DJQMIWVB*IBA2K0OAKOJ62K7UJ$JCI8CHOJL7J/922JB.NI7DJ/MJQZJ%WC*B4DJP-NT0 2$$0X4PCY0+-C1W4/GJI+C7*4M:KK54%KIO4KPK6PK6F$BG+SB.V Q5-L9TL2.WQTU1KNIL4T.B9GYPWRUXT0B0L:/6J/5R95926$17VE4+Y5ET42:6.77/Z6YCRT8QSA7G6MCORN96HC3+ ONM8NM8JPGN6HN8NB4JQK4CPHEBSM+O*+Q.*BPTMKNE9*M.NUW-MMWU/O90.FB5S9CF%R2IAFSCEIX0/XBB 7HKSFCS*+F%8OAGWVCVJ2AARB%SL000XJO+MH";
+
 use std::io::{Seek,Read};
 use x509_parser::prelude::*;
 
@@ -37,72 +45,72 @@ struct Jwk {
     pub crv : Option<String>
 }
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-   
-    let key_list = include_bytes!("list");
-    let cwt = get_payload(key_list).unwrap();
-    let keys = cwt.message.get(&serde_cbor::Value::Text("c".to_string())).unwrap();
 
-    match keys { 
-        serde_cbor::Value::Array(arr) => {
-            let jwks = arr.iter().filter_map(|key_entry| {
-                match key_entry {
-                    serde_cbor::Value::Map(m) => Some(m),
-                    _ => None
-                }
-            }).filter_map(|key| {
-                let kid = if let Some(serde_cbor::Value::Bytes(i))= key.get(&serde_cbor::Value::Text("i".to_string())) { base64::encode_config(i, base64::STANDARD)} else { return None};
-                match key.get(&serde_cbor::Value::Text("k".to_string())) {
-                    Some(serde_cbor::Value::Text(t)) if t == "e" => {
-                        let key = if let Some(serde_cbor::Value::Bytes(b)) = key.get(&serde_cbor::Value::Text("p".to_string())) {b.to_owned()} else { return None};
-                        let x = base64::encode_config(&key[1..33],base64::STANDARD_NO_PAD);
-                        let y = base64::encode_config(&key[33..],base64::STANDARD_NO_PAD);
-                        Some(
-                            Jwk {
-                                kid,
-                                x: Some(x),
-                                y: Some(y),
-                                crv: Some(String::from("P-256")),
-                                kty: "EC".to_string(),
-                                alg: "ES256".to_string(),
-                                r#use: "sig".to_string(),
-                                ..Default::default()
-                            }
-                        )
-                    },
-                    Some(serde_cbor::Value::Text(t) ) if t == "r" =>{
-                        let key = if let Some(serde_cbor::Value::Bytes(b)) = key.get(&serde_cbor::Value::Text("p".to_string())) {b.to_owned()} else { return None};
-                        let asn_codes = simple_asn1::from_der(&key).unwrap();
-                        match &asn_codes[0] {
-                            simple_asn1::ASN1Block::Sequence(seq,a) => {
-                                let n = if let simple_asn1::ASN1Block::Integer(_, bi) = &a[0] { base64::encode_config(bi.to_signed_bytes_be(), base64::STANDARD_NO_PAD)} else {return None};
-                                let e = if let simple_asn1::ASN1Block::Integer(_, bi) = &a[1] {  base64::encode_config(bi.to_signed_bytes_be(), base64::STANDARD_NO_PAD)} else {return None};
-                                return Some(
-                                    Jwk {
-                                        kid,
-                                        n: Some(n),
-                                        e: Some(e),
-                                        kty: "RSA".to_string(),
-                                        alg: "RS256".to_string(),
-                                        r#use: "sig".to_string(),
-                                        ..Default::default()
-                                    }
-                                )
+    // let key_list = include_bytes!("list");
+    // let cwt = get_payload(key_list).unwrap();
+    // let keys = cwt.message.get(&serde_cbor::Value::Text("c".to_string())).unwrap();
+
+    // match keys { 
+    //     serde_cbor::Value::Array(arr) => {
+    //         let jwks = arr.iter().filter_map(|key_entry| {
+    //             match key_entry {
+    //                 serde_cbor::Value::Map(m) => Some(m),
+    //                 _ => None
+    //             }
+    //         }).filter_map(|key| {
+    //             let kid = if let Some(serde_cbor::Value::Bytes(i))= key.get(&serde_cbor::Value::Text("i".to_string())) { base64::encode_config(i, base64::STANDARD)} else { return None};
+    //             match key.get(&serde_cbor::Value::Text("k".to_string())) {
+    //                 Some(serde_cbor::Value::Text(t)) if t == "e" => {
+    //                     let key = if let Some(serde_cbor::Value::Bytes(b)) = key.get(&serde_cbor::Value::Text("p".to_string())) {b.to_owned()} else { return None};
+    //                     let x = base64::encode_config(&key[1..33],base64::STANDARD_NO_PAD);
+    //                     let y = base64::encode_config(&key[33..],base64::STANDARD_NO_PAD);
+    //                     Some(
+    //                         Jwk {
+    //                             kid,
+    //                             x: Some(x),
+    //                             y: Some(y),
+    //                             crv: Some(String::from("P-256")),
+    //                             kty: "EC".to_string(),
+    //                             alg: "ES256".to_string(),
+    //                             r#use: "sig".to_string(),
+    //                             ..Default::default()
+    //                         }
+    //                     )
+    //                 },
+    //                 Some(serde_cbor::Value::Text(t) ) if t == "r" =>{
+    //                     let key = if let Some(serde_cbor::Value::Bytes(b)) = key.get(&serde_cbor::Value::Text("p".to_string())) {b.to_owned()} else { return None};
+    //                     let asn_codes = simple_asn1::from_der(&key).unwrap();
+    //                     match &asn_codes[0] {
+    //                         simple_asn1::ASN1Block::Sequence(seq,a) => {
+    //                             let n = if let simple_asn1::ASN1Block::Integer(_, bi) = &a[0] { base64::encode_config(bi.to_signed_bytes_be(), base64::STANDARD_NO_PAD)} else {return None};
+    //                             let e = if let simple_asn1::ASN1Block::Integer(_, bi) = &a[1] {  base64::encode_config(bi.to_signed_bytes_be(), base64::STANDARD_NO_PAD)} else {return None};
+    //                             return Some(
+    //                                 Jwk {
+    //                                     kid,
+    //                                     n: Some(n),
+    //                                     e: Some(e),
+    //                                     kty: "RSA".to_string(),
+    //                                     alg: "RS256".to_string(),
+    //                                     r#use: "sig".to_string(),
+    //                                     ..Default::default()
+    //                                 }
+    //                             )
                                 
-                            },
-                            _ => return None
-                        }
-                    },
-                    _ => return None
-                }
-            }).collect::<Vec<Jwk>>();
-            println!("{:}", serde_json::to_string(&jwks).unwrap());
-        }
-        _ => panic!()
-    }
-    println!("{:?}",cwt.message);
-    return Ok(());
+    //                         },
+    //                         _ => return None
+    //                     }
+    //                 },
+    //                 _ => return None
+    //             }
+    //         }).collect::<Vec<Jwk>>();
+    //         println!("{:}", serde_json::to_string(&jwks).unwrap());
+    //     }
+    //     _ => panic!()
+    // }
+    // println!("{:?}",cwt.message);
+    // return Ok(());
     
-    // let cwt_bit = get_payload(&from_byte_string!(BIT_NEW)).unwrap();
+    let mut cwt_bit = get_payload(&from_byte_string!(BIT_NEW)).unwrap();
     // println!("{}", serde_json::to_string_pretty(&cwt_bit.get_hcert().unwrap()).unwrap());
     // return Ok(());
 
@@ -188,6 +196,48 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // let verification_key = VerificationKey::Rsa{key: to_byte_string!(base64::decode(PUBLIC_PART).unwrap())};
 
     // println!("Signature {:?}", cwt_hcert.verify(&verification_key));
+    
+    let key = p256::ecdsa::SigningKey::random(&mut OsRng);
+    let sig_key = key.to_bytes().to_vec();
+    let sig_key = SigningKey::Es256 { d: to_byte_string!(sig_key) };
+    
+    let pk = p256::ecdsa::VerifyingKey::from(&key);
+    cwt_bit.protected_headers.insert(serde_cbor::Value::Integer(4), serde_cbor::Value::Bytes(vec![0,0,1,1,2,2,3,3]));
+    let entry = cwt_bit.protected_headers.get_mut(&serde_cbor::Value::Integer(1)).unwrap();
+    *entry = Value::Integer(-7);
+    
+    cwt_bit.message.remove(&serde_cbor::Value::Integer(6));
+    cwt_bit.message.remove(&serde_cbor::Value::Integer(4));
 
+    // cwt_bit.message.entry(serde_cbor::Value::Integer(6)).and_modify(|e| {
+    //     *e = serde_cbor::Value::Text("dreiundzwanzigster fünfter zweitausendundzwanzig".to_string())
+    // }).or_insert(serde_cbor::Value::Text("dreiundzwanzigster fünfter zweitausendundzwanzig".to_string()));
+
+    //  cwt_bit.message.entry(serde_cbor::Value::Integer(4)).and_modify(|e| {
+    //     *e = serde_cbor::Value::Bool(true)
+    // }).or_insert(serde_cbor::Value::Bool(true));
+
+    cwt_bit.sign(&sig_key).unwrap();
+    let bytes = cwt_bit.to_cbor()?;
+    let mut b = vec![];
+    let mut compression = flate2::write::ZlibEncoder::new(&mut b, Compression::default());
+    use std::io::Write;
+    compression.write_all(&bytes).unwrap();
+    let _ = compression.finish()?;
+    let encoded_point_struct = pk.to_encoded_point(false);
+    let encoded_point = encoded_point_struct.as_bytes();
+    println!("X {}",base64::encode(&encoded_point[1..33]));
+    println!("Y {}",base64::encode(&encoded_point[33..]));
+
+    let vk = VerificationKey::Es256 { x: to_byte_string!(&encoded_point[1..33]), y: to_byte_string!(&encoded_point[33..]) };
+    println!("{:?}", cwt_bit.verify(&vk));
+    let base45_string = rust_dgc::base45::encode(&b);
+    let cert = format!("HC1:{}", base45_string);
+    println!("HC1:{}", base45_string);
+    println!("{}", base64::encode(vec![0,0,1,1,2,2,3,3]));
+
+    let qrcode = qrcode::QrCode::new(cert.as_bytes())?;
+    let the_qr_code = qrcode.render::<Luma<u8>>().build();
+    the_qr_code.save("test_untagged.png")?;
     Ok(())
 }

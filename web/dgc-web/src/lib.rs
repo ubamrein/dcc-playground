@@ -14,6 +14,11 @@ const ABN_KEY : [&str;2] = [
 ];
 const ABN_KEY_ID: &str = "";
 
+const PROD_KEY: [&str;2] = [
+    "ALZP+dbLSV1OPEag9pYeCHbMRa45SX5kwqy693EDRF5KxKCNzhFfDZ6LRNUY1ZkK6i009OKMaVpXGzKJV7SQbbt6zoizcEL8lRG4/8UnOik/OE6exgaNT/5JLp2PlZmm+h1Alf6BmWJrHYlD/zp0z1+lsunXpQ4Z64ByA7Yu9/00rBu2ZdVepJu/iiJIwJFQhA5JFA+7n33eBvhgWdAfRdSjk9CHBUDbw5tM5UTlaBhZZj0vA1payx7iHTGwdvNbog43DfpDVLe61Mso+kxYF/VgoBAf+ZkATEWmlytc3g02jZJgtkuyFsYTELDAVycgHWw/QJ0DmXOl0YwWrju4M9M=",
+    "AQAB"
+];
+
 #[wasm_bindgen]
 pub fn get_qr_code_data(image: String) -> String {
     if let Ok(data) = base64::decode(&image) {
@@ -136,6 +141,7 @@ pub fn verify_cwt_rsa_with_environment(cbor_cwt: String, env: String) -> bool {
     let key = match env.to_lowercase().as_str() {
         "abn" => VerificationKey::rsa_from_n_and_e(ABN_KEY[0], ABN_KEY[1]),
         "dev" => VerificationKey::rsa_from_n_and_e(DEV_KEY[0], DEV_KEY[1]),
+        "prod" => VerificationKey::rsa_from_n_and_e(PROD_KEY[0], PROD_KEY[1]),
         _ => return false,
     };
     if let Ok(key) = key {

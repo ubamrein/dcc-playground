@@ -1,5 +1,5 @@
 use std::collections::BTreeMap;
-use image::{DynamicImage, GenericImageView, GrayImage};
+use image::{DynamicImage, GenericImageView, GrayImage, Rgba, RgbaImage};
 use serde_cbor::Value;
 
 pub mod base45;
@@ -13,7 +13,32 @@ pub fn decode_qr(img: &[u8]) -> Result<String, Box<dyn std::error::Error>> {
     let grids = img.detect_grids();
     for g in grids {
         let (meta, content) = g.decode()?;
+        println!("{:?}", meta);
         return Ok (content);
+    }
+    return Err("No data".into());
+}
+pub fn decode_qr_from_buffer(width: u32, height: u32, data: Vec<u8>) -> Result<String, Box<dyn std::error::Error>> {
+    let image = RgbaImage::from_vec(width, height, data).ok_or("Not rgba")?;
+    let image = image::DynamicImage::ImageRgba8(image).to_luma8();
+     let mut img = rqrr::PreparedImage::prepare(image);
+    let grids = img.detect_grids();
+    for g in grids {
+        let (meta, content) = g.decode()?;
+        println!("{:?}", meta);
+        return Ok (content);
+    }
+    return Err("No data".into());
+}
+
+pub fn get_qr_meta(img: &[u8]) -> Result<String, Box<dyn std::error::Error>> {
+    let image = image::load_from_memory(img)?.to_luma8();
+    let mut img = rqrr::PreparedImage::prepare(image);
+    let grids = img.detect_grids();
+    for g in grids {
+        let (meta, content) = g.decode()?;
+        println!("{:?}", meta);
+        return Ok (format!("{:?}", meta));
     }
     return Err("No data".into());
 }
@@ -22,9 +47,31 @@ pub fn decode_qr(img: &[u8]) -> Result<String, Box<dyn std::error::Error>> {
 mod tests {
     #[test]
     fn test_qrcode() {
-        let img = include_bytes!("test_imgs/test_code.png");
-        let result = super::decode_qr(img).unwrap();
-        println!("{}", result);
+        let mut origs = vec![];
+        let orig1 = include_bytes!("test_imgs/tests/orig1.png");
+        origs.push( super::get_qr_meta(orig1).unwrap());
+
+        let orig2 = include_bytes!("test_imgs/tests/orig2.png");
+         origs.push( super::get_qr_meta(orig2).unwrap());
+
+        let orig3 = include_bytes!("test_imgs/tests/orig3.png");
+        origs.push(super::get_qr_meta(orig3).unwrap());
+
+
+        let mut androids = vec![];
+        let android1 = include_bytes!("test_imgs/tests/android1.png");
+        androids.push( super::get_qr_meta(android1).unwrap());
+
+        let android2 = include_bytes!("test_imgs/tests/android2.png");
+         androids.push(  super::get_qr_meta(android2).unwrap());
+
+        let android3 = include_bytes!("test_imgs/tests/android3.png");
+         androids.push(  super::get_qr_meta(android3).unwrap());
+
+         for (orig, android) in origs.iter().zip(androids) {
+             println!("Orig: {}", orig);
+             println!("Android: {}", android);
+         }
     }
 }
 
@@ -168,7 +215,7 @@ pub fn get_payload(raw_payload: &[u8]) -> Result<CwtParsed, Box<dyn std::error::
         Value::Bytes(a) => a,
         _ => return Err("no signature".into()),
     };
-    let protected_headers: serde_cbor::Value = serde_cbor::from_reader(&protected_headers[..])?;
+    let protected_headers: BTreeMap<Value, Value>  = serde_cbor::from_reader(&protected_headers[..])?;
 
     let message: BTreeMap<Value, Value> = serde_cbor::from_reader(&message[..])?;
 
@@ -218,7 +265,7 @@ pub struct CwtParsed {
     /// According to [RFC-8152 Section-3](https://tools.ietf.org/html/rfc8152#section-3)
     /// since the protected headers are cryptographically signed, we want to prevent accidental
     /// changes, so they are included as a serialized CBOR Map.
-    pub protected_headers: serde_cbor::Value,
+    pub protected_headers: BTreeMap<Value,Value>,
     pub protected_headers_original: serde_cbor::Value,
     /// Unprotected headers do not need such protection and as such are just presented as a CBOR Map
     pub unprotected_headers: BTreeMap<Value, Value>,
@@ -279,31 +326,27 @@ impl CwtParsed {
     /// Sign the CWT with the given [SigningKey]. Overwrites the `siganture` field of `self`.
     pub fn sign(&mut self, key: &SigningKey) -> Result<(), Box<dyn std::error::Error>> {
         match key {
-            SigningKey::Es256 { d, x, y } => {
-                let mut pk = Vec::with_capacity(65);
-                pk.push(0x04u8);
-                pk.extend(from_byte_string!(x));
-                pk.extend(from_byte_string!(y));
-                // let key_pair = ring::signature::EcdsaKeyPair::from_private_key_and_public_key(
-                //     &ring::signature::ECDSA_P256_SHA256_FIXED_SIGNING,
-                //     &from_byte_string!(d),
-                //     &pk,
-                // )
+            SigningKey::Es256 { d } => {
                 // .map_err(|e| format!("KeyRejected {:?}", e))?;
-                let bytes_to_sign = self.get_verification_bytes()?;
+                let bytes_to_sign = self.get_signing_bytes()?;
                 // let rng = ring::rand::SystemRandom::new();
                 // let signature = key_pair
                 //     .sign(&rng, &bytes_to_sign)
                 //     .map_err(|_| format!("Could not sign"))?;
 
-                let key = p256::ecdsa::SigningKey::from_bytes(&pk)?;
+                let key = p256::ecdsa::SigningKey::from_bytes(&from_byte_string!(d))?;
                 let signature = key.sign(&bytes_to_sign);
+                println!("{:?}", signature.r().to_bytes().to_vec());
+                println!("{}", signature.r().to_bytes().to_vec().len());
+                println!("{:?}", signature.s().to_bytes().to_vec());
+                println!("{}", signature.s().to_bytes().to_vec().len());
                 self.signature = signature.as_ref().to_vec();
+                println!("{}", self.signature.len());
             }
             SigningKey::RsaPkcs8 { pkcs8 } => {
                 let rsa_keypair = ring::signature::RsaKeyPair::from_pkcs8(&pkcs8)
                     .map_err(|e| format!("KeyRejected {:?}", e))?;
-                let bytes_to_sign = self.get_verification_bytes()?;
+                let bytes_to_sign = self.get_signing_bytes()?;
                 let rng = ring::rand::SystemRandom::new();
                 let mut signature = vec![0; rsa_keypair.public_modulus_len()];
 
@@ -320,7 +363,7 @@ impl CwtParsed {
             SigningKey::RsaDer { der } => {
                 let rsa_keypair = ring::signature::RsaKeyPair::from_der(&der)
                     .map_err(|e| format!("KeyRejected {:?}", e))?;
-                let bytes_to_sign = self.get_verification_bytes()?;
+                let bytes_to_sign = self.get_signing_bytes()?;
                 let rng = ring::rand::SystemRandom::new();
                 let mut signature = vec![0; rsa_keypair.public_modulus_len()];
 
@@ -338,7 +381,7 @@ impl CwtParsed {
         Ok(())
     }
     /// Get the CBOR canoncial form for the bytes to sign according to [RFC-8152# Section-4.4](https://tools.ietf.org/html/rfc8152#section-4.4)
-    fn get_verification_bytes(&self) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    pub fn get_verification_bytes(&self) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
         let mut verification = vec![];
         verification.push(Value::Text("Signature1".to_string()));
         verification.push(self.protected_headers_original.clone());
@@ -348,6 +391,27 @@ impl CwtParsed {
         Ok(serde_cbor::to_vec(&verification)?)
     }
 
+    pub fn get_signing_bytes(&mut self) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+        let mut verification = vec![];
+        self.protected_headers_original = Value::Bytes(serde_cbor::to_vec(&self.protected_headers)?);
+        self.original = Value::Bytes(serde_cbor::to_vec(&self.message)?);
+
+        verification.push(Value::Text("Signature1".to_string()));
+        verification.push(self.protected_headers_original.clone());
+        verification.push(Value::Bytes(vec![]));
+        verification.push(self.original.clone());
+
+        Ok(serde_cbor::to_vec(&verification)?)
+    }
+
+    pub fn to_cbor(&mut self) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+        let mut verification = vec![];
+        verification.push(self.protected_headers_original.clone());
+        verification.push(serde_cbor::Value::Map(self.unprotected_headers.clone()));
+        verification.push(self.original.clone());
+        verification.push(Value::Bytes(self.signature.clone()));
+        Ok(serde_cbor::to_vec(&verification)?)
+    }
     /// The `hcert` is part of the claims in the CWT. The `hcert` itself is a container for multiple different certificates (c.f [Section 2.6.4](https://ec.europa.eu/health/sites/health/files/ehealth/docs/digital-green-certificates_v3_en.pdf)). For the Version 1 of the `DGC` the claim key `1` is used (c.f. [Section 3.3.1](https://ec.europa.eu/health/sites/health/files/ehealth/docs/digital-green-certificates_v1_en.pdf))
     pub fn get_hcert(&self) -> Option<BTreeMap<Value, Value>> {
         match self.message.get(&Value::Integer(HCERT_KEY)) {
@@ -404,7 +468,7 @@ impl VerificationKey {
 /// Possible SigningKeys. We allow `RSA` or `EC`.
 pub enum SigningKey {
     /// The `EC` private key
-    Es256 { d: String, x: String, y: String },
+    Es256 { d: String },
     /// The RSA-Private key in the der format in a PKCS8 container.
     RsaPkcs8 { pkcs8: Vec<u8> },
     /// The RSA-Private key in the der format without a ccontainer.
