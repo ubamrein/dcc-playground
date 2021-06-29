@@ -146,12 +146,12 @@ async fn func(event: Value, _: Context) -> Result<Value, Error> {
         let iat = std::time::SystemTime::now()
             .duration_since(std::time::SystemTime::UNIX_EPOCH)
             .unwrap()
-            .as_millis();
+            .as_secs();
         let exp = (std::time::SystemTime::now()
             .duration_since(std::time::SystemTime::UNIX_EPOCH)
             .unwrap()
             + Duration::from_millis(48 * 3600 * 1000))
-        .as_millis();
+        .as_secs();
 
         new_map.insert(
             serde_cbor::Value::Integer(4),
