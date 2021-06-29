@@ -110,21 +110,26 @@ async fn func(event: Value, _: Context) -> Result<Value, Error> {
             return Err("no valid cert".into());
         };
         let mut light_cert: BTreeMap<serde_cbor::Value, serde_cbor::Value> = BTreeMap::new();
-        light_cert.insert(
+        let mut name_map : BTreeMap<serde_cbor::Value, serde_cbor::Value> = BTreeMap::new();
+        name_map.insert(
             serde_cbor::Value::Text("fn".to_string()),
             serde_cbor::Value::Text(name.to_owned()),
         );
-        light_cert.insert(
+        name_map.insert(
             serde_cbor::Value::Text("gn".to_string()),
             serde_cbor::Value::Text(gn.to_owned()),
         );
-          light_cert.insert(
+          name_map.insert(
             serde_cbor::Value::Text("fnt".to_string()),
             serde_cbor::Value::Text(fnt.to_owned()),
         );
-        light_cert.insert(
+        name_map.insert(
             serde_cbor::Value::Text("gnt".to_string()),
             serde_cbor::Value::Text(gnt.to_owned()),
+        );
+         light_cert.insert(
+            serde_cbor::Value::Text("nam".to_string()),
+            serde_cbor::Value::Map(name_map),
         );
         light_cert.insert(
             serde_cbor::Value::Text("dob".to_string()),
