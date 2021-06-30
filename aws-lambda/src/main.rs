@@ -5,9 +5,8 @@ use std::{
 };
 
 use flate2::Compression;
-use image::{DynamicImage, ImageOutputFormat, Luma, Rgb};
+use image::{DynamicImage, ImageOutputFormat, Rgb};
 use lambda_runtime::{handler_fn, Context, Error};
-use rand::rngs::OsRng;
 use rust_dgc::{base45, from_byte_string, to_byte_string, CwtParsed, SigningKey};
 use serde_json::{json, Value};
 const PRIVATE_KEY: &str = "48483aca9813ef5eb42f0b6b1d4f583efef07aa6eb12922fc60d8d453ab81e3e";
@@ -31,7 +30,7 @@ fn parse_cwt(cbor_cwt: &str) -> Result<CwtParsed, Error> {
         let mut decompressed = vec![];
         match decompressor.read_to_end(&mut decompressed) {
             Ok(_) => to_byte_string!(decompressed),
-            Err(r) => "".to_string(),
+            Err(r) => format!("{:?}", r),
         }
     } else {
         "".to_string()
@@ -65,7 +64,7 @@ async fn func(event: Value, _: Context) -> Result<Value, Error> {
     }
     {
         let hcert = cwt.get_hcert().unwrap();
-        let (gn, name, fnt, gnt, dob, cert_id) = if let (Some(name), Some(dob)) = (
+        let (gn, name, fnt, gnt, dob) = if let (Some(name), Some(dob)) = (
             hcert.get(&serde_cbor::Value::Text("nam".to_string())),
             hcert.get(&serde_cbor::Value::Text("dob".to_string())),
         ) {
@@ -78,32 +77,31 @@ async fn func(event: Value, _: Context) -> Result<Value, Error> {
                 ),
                 _ => return Err("Name is not a map".into()),
             };
-            let cert_id = hcert
-                .get(&serde_cbor::Value::Text("v".to_string()))
-                .or_else(|| hcert.get(&serde_cbor::Value::Text("r".to_string())))
-                .or_else(|| hcert.get(&serde_cbor::Value::Text("t".to_string())))
-                .and_then(|v| match v {
-                    serde_cbor::Value::Array(m) => {
-                        let first = &m[0];
-                        match first {
-                            serde_cbor::Value::Map(m) => {
-                                m.get(&serde_cbor::Value::Text("ci".to_string()))
-                            },
-                            _ => None
-                        }
-                    }
-                    _ => None,
-                })
-                .ok_or("No valid entry")?;
-            match (gn, name,fnt,gnt, dob, cert_id) {
+            // let cert_id = hcert
+            //     .get(&serde_cbor::Value::Text("v".to_string()))
+            //     .or_else(|| hcert.get(&serde_cbor::Value::Text("r".to_string())))
+            //     .or_else(|| hcert.get(&serde_cbor::Value::Text("t".to_string())))
+            //     .and_then(|v| match v {
+            //         serde_cbor::Value::Array(m) => {
+            //             let first = &m[0];
+            //             match first {
+            //                 serde_cbor::Value::Map(m) => {
+            //                     m.get(&serde_cbor::Value::Text("ci".to_string()))
+            //                 },
+            //                 _ => None
+            //             }
+            //         }
+            //         _ => None,
+            //     })
+            //     .ok_or("No valid entry")?;
+            match (gn, name,fnt,gnt, dob) {
                 (
                     serde_cbor::Value::Text(gn),
                     serde_cbor::Value::Text(name),
                     serde_cbor::Value::Text(fnt),
                     serde_cbor::Value::Text(gnt),
-                    serde_cbor::Value::Text(dob),
-                    serde_cbor::Value::Text(cert_id),
-                ) => (gn, name,fnt,gnt, dob, cert_id),
+                    serde_cbor::Value::Text(dob)
+                ) => (gn, name,fnt,gnt, dob),
                 _ => return Err("No valid cert".into()),
             }
         } else {
@@ -127,6 +125,10 @@ async fn func(event: Value, _: Context) -> Result<Value, Error> {
             serde_cbor::Value::Text("gnt".to_string()),
             serde_cbor::Value::Text(gnt.to_owned()),
         );
+        light_cert.insert(
+        serde_cbor::Value::Text("ver".to_string()),
+            serde_cbor::Value::Text("1.0.0".to_string()),
+        );
          light_cert.insert(
             serde_cbor::Value::Text("nam".to_string()),
             serde_cbor::Value::Map(name_map),
@@ -135,11 +137,7 @@ async fn func(event: Value, _: Context) -> Result<Value, Error> {
             serde_cbor::Value::Text("dob".to_string()),
             serde_cbor::Value::Text(dob.to_owned()),
         );
-        light_cert.insert(
-            serde_cbor::Value::Text("ci".to_string()),
-            serde_cbor::Value::Text(cert_id.to_owned()),
-        );
-
+       
         let mut new_map: BTreeMap<serde_cbor::Value, serde_cbor::Value> = BTreeMap::new();
         new_map.insert(
             serde_cbor::Value::Integer(1),
@@ -181,8 +179,9 @@ async fn func(event: Value, _: Context) -> Result<Value, Error> {
     compression.write_all(&bytes).unwrap();
     let _ = compression.finish()?;
     let base45_string = rust_dgc::base45::encode(&b);
-    let cert = format!("BAG:{}", base45_string);
+    let cert = format!("LT1:{}", base45_string);
     let qrcode = qrcode::QrCode::new(cert.as_bytes())?;
+
     let the_qr_code = qrcode.render::<Rgb<u8>>().dark_color([0x27,0x32,0x77].into()).build();
     let dyn_image = DynamicImage::ImageRgb8(the_qr_code);
     let mut png_bytes = vec![];
@@ -192,4 +191,23 @@ async fn func(event: Value, _: Context) -> Result<Value, Error> {
        "qrcode" : base64::encode(&png_bytes),
        "payload" : cert
     }))
+}
+#[cfg(test)]
+mod tests {
+    use image::Rgb;
+
+    #[test]
+    fn testQrCode() {
+        let qrcode = qrcode::QrCode::new(b"tests").unwrap();
+       
+        let mut the_qr_code = qrcode.render::<Rgb<u8>>().dark_color([0x27,0x32,0x77].into()).build();
+        let ratio = the_qr_code.width() / qrcode.width() as u32;
+       
+        the_qr_code.enumerate_pixels_mut().for_each(|(x,y, p)|{
+            if qrcode.is_functional((x *8) as usize, (y*8) as usize) {
+                *p = [0xFF as u8,0x0A as u8,0x00 as u8].into();
+            }
+        });
+        the_qr_code.save("test.png");
+    }
 }
