@@ -3,8 +3,8 @@
   "name": "rust-webpack-template",
   "version": "0.1.0",
   "scripts": {
-    "build": "TARGET_CC=/usr/local/opt/llvm/bin/clang-11 TARGET_AR=/usr/local/opt/llvm/bin/llvm-ar rimraf dist pkg && TARGET_CC=/usr/local/opt/llvm/bin/clang-11 TARGET_AR=/usr/local/opt/llvm/bin/llvm-ar webpack",
-    "start": "TARGET_CC=/usr/local/opt/llvm/bin/clang-11 TARGET_AR=/usr/local/opt/llvm/bin/llvm-ar rimraf dist pkg && TARGET_CC=/usr/local/opt/llvm/bin/clang-11 TARGET_AR=/usr/local/opt/llvm/bin/llvm-ar  webpack-dev-server --open -d",
+    "build": "TARGET_CC=/opt/homebrew/Cellar/llvm@11/11.1.0_4/bin/clang-11 TARGET_AR=/opt/homebrew/Cellar/llvm@11/11.1.0_4/bin/llvm-ar rimraf dist pkg && TARGET_CC=/opt/homebrew/Cellar/llvm@11/11.1.0_4/bin/clang-11 TARGET_AR=/opt/homebrew/Cellar/llvm@11/11.1.0_4/bin/llvm-ar webpack",
+    "start": "TARGET_CC=/opt/homebrew/Cellar/llvm@11/11.1.0_4/bin/clang-11 TARGET_AR=/opt/homebrew/Cellar/llvm@11/11.1.0_4/bin/llvm-ar rimraf dist pkg && TARGET_CC=/opt/homebrew/Cellar/llvm@11/11.1.0_4/bin/clang-11 TARGET_AR=/opt/homebrew/Cellar/llvm@11/11.1.0_4/bin/llvm-ar  webpack-dev-server --open -d",
     "test": "cargo test && wasm-pack test --headless"
   },
   "devDependencies": {

@@ -1,6 +1,6 @@
 use std::io::Cursor;
 
-use rust_dgc::{base45, from_byte_string, get_payload,get_meta, to_byte_string, VerificationKey};
+use rust_dgc::{base45, from_byte_string, get_meta, get_payload, to_byte_string, VerificationKey};
 use std::io::Read;
 use wasm_bindgen::prelude::*;
 
@@ -19,12 +19,17 @@ const PROD_KEY: [&str;2] = [
     "AQAB"
 ];
 
+const AA_KEY: [&str;2] = [
+    "ANFbJCZhFV75TBGbgKe0Q5LmvEMDEkHSIEMjPfbyreWsANRu0jiq/UAQc45DRFxwcT1qg6AD0/TabUlev6zQjft82h6tzFAW+8iGxa6Q8T3DPu0d9q/bjeV93eRmXDiQ6sxaO/WYQ0e3H99N7nwKoN6R9bkmrav/+lrO31dtfM1ju14yexZllx7SbLkFwZm7SvjZcxm0j1mPwJVmjQxW50Dm06YrPn/esddVGwxETdIhwZA1FS+d1GAlGc32QG3NpK7RXk2BSBEOXc4q8V5m4FVL7YrvYL56/rDoBuABKfz/sJDclkrQhshchBqTD2toeyA3zzFqj37RSzfT3Pelrfk=",
+    "AQAB"
+];
+
 #[wasm_bindgen]
 pub fn get_qr_code_data(image: String) -> String {
     if let Ok(data) = base64::decode(&image) {
-        return rust_dgc::decode_qr(&data).unwrap_or(String::from(""))
+        return rust_dgc::decode_qr(&data).unwrap_or(String::from(""));
     }
-    return String::from("")
+    return String::from("");
 }
 
 #[wasm_bindgen]
@@ -52,7 +57,7 @@ pub fn parse_cwt_from_bytestring(cbor_cwt: String) -> String {
 
 #[wasm_bindgen]
 pub fn get_cwt_info(cbor_cwt: String) -> String {
-     let cbor_cwt = if cbor_cwt.starts_with("HC1:") {
+    let cbor_cwt = if cbor_cwt.starts_with("HC1:") {
         let mut decoded =
             Cursor::new(base45::decode(&cbor_cwt.replace("HC1:", "")).unwrap_or(vec![]));
         let mut decompressor = flate2::read::ZlibDecoder::new(&mut decoded);
@@ -138,36 +143,49 @@ pub fn verify_cwt_ec(cbor_cwt: String, x: String, y: String, encoding: String) -
 
 #[wasm_bindgen]
 pub fn verify_cwt_rsa_with_environment(cbor_cwt: String, env: String) -> bool {
-    let key = match env.to_lowercase().as_str() {
-        "abn" => VerificationKey::rsa_from_n_and_e(ABN_KEY[0], ABN_KEY[1]),
-        "dev" => VerificationKey::rsa_from_n_and_e(DEV_KEY[0], DEV_KEY[1]),
-        "prod" => VerificationKey::rsa_from_n_and_e(PROD_KEY[0], PROD_KEY[1]),
+    let keys = match env.to_lowercase().as_str() {
+        "abn" => vec![VerificationKey::rsa_from_n_and_e(ABN_KEY[0], ABN_KEY[1])],
+        "dev" => vec![VerificationKey::rsa_from_n_and_e(DEV_KEY[0], DEV_KEY[1])],
+        "prod" => {
+            let prod_csv = include_str!("../certs_prod.csv").lines();
+            let mut keys = vec![];
+            for line in prod_csv {
+                let splits: Vec<_> = line.split(',').collect();
+                if splits.len() == 3 {
+                    keys.push(VerificationKey::rsa_from_n_and_e(splits[1], splits[2]));
+                }
+            }
+            keys
+        }
+        "aa" => vec![VerificationKey::rsa_from_n_and_e(AA_KEY[0], AA_KEY[1])],
         _ => return false,
     };
-    if let Ok(key) = key {
-        let cbor_cwt = if cbor_cwt.starts_with("HC1:") {
-            let mut decoded =
-                Cursor::new(base45::decode(&cbor_cwt.replace("HC1:", "")).unwrap_or(vec![]));
-            let mut decompressor = flate2::read::ZlibDecoder::new(&mut decoded);
-            let mut decompressed = vec![];
-            match decompressor.read_to_end(&mut decompressed) {
-                Ok(_) => to_byte_string!(decompressed),
-                Err(r) => "".to_string(),
-            }
-        } else {
-            cbor_cwt.replace(" ", "").replace("\n", "")
-        };
-        let cbor_bytes = from_byte_string!(cbor_cwt);
+    let cbor_cwt = if cbor_cwt.starts_with("HC1:") {
+        let mut decoded =
+            Cursor::new(base45::decode(&cbor_cwt.replace("HC1:", "")).unwrap_or(vec![]));
+        let mut decompressor = flate2::read::ZlibDecoder::new(&mut decoded);
+        let mut decompressed = vec![];
+        match decompressor.read_to_end(&mut decompressed) {
+            Ok(_) => to_byte_string!(decompressed),
+            Err(r) => "".to_string(),
+        }
+    } else {
+        cbor_cwt.replace(" ", "").replace("\n", "")
+    };
+    let cbor_bytes = from_byte_string!(cbor_cwt);
 
-        let cwt = if let Ok(cwt) = get_payload(&cbor_bytes) {
-            cwt
-        } else {
-            return false;
-        };
-        cwt.verify(&key).is_ok()
+    let cwt = if let Ok(cwt) = get_payload(&cbor_bytes) {
+        cwt
     } else {
         return false;
+    };
+
+    for key in keys.into_iter().flatten() {
+        if cwt.verify(&key).is_ok() {
+            return true;
+        }
     }
+    false
 }
 
 #[wasm_bindgen]
