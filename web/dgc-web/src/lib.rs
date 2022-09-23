@@ -144,7 +144,17 @@ pub fn verify_cwt_ec(cbor_cwt: String, x: String, y: String, encoding: String) -
 #[wasm_bindgen]
 pub fn verify_cwt_rsa_with_environment(cbor_cwt: String, env: String) -> bool {
     let keys = match env.to_lowercase().as_str() {
-        "abn" => vec![VerificationKey::rsa_from_n_and_e(ABN_KEY[0], ABN_KEY[1])],
+        "abn" => {
+            let abn_csv = include_str!("../certs_abn.csv").lines();
+            let mut keys = vec![];
+            for line in abn_csv {
+                let splits: Vec<_> = line.split(',').collect();
+                if splits.len() == 3 {
+                    keys.push(VerificationKey::rsa_from_n_and_e(splits[1], splits[2]));
+                }
+            }
+            keys
+        }
         "dev" => vec![VerificationKey::rsa_from_n_and_e(DEV_KEY[0], DEV_KEY[1])],
         "prod" => {
             let prod_csv = include_str!("../certs_prod.csv").lines();
